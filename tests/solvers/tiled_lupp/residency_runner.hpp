@@ -38,7 +38,7 @@ enum class SolvePath {
     fused     ///< solve_fused()
 };
 
-/// \brief Runs one entry path of the static solver under one residency
+/// \brief Runs one entry path of the static TiledLUpp solver under one residency
 /// combination.
 /// \tparam T               scalar type
 /// \tparam N               system dimension
@@ -47,7 +47,7 @@ enum class SolvePath {
 /// \tparam internal_rhs    residency of the right-hand side and solution
 /// \tparam internal_piv    residency of the pivot
 /// \tparam internal_matrix residency of the matrix
-template<typename T, int N, int TS, tdls::TiledLuSchedule Sched, bool internal_rhs,
+template<typename T, int N, int TS, tdls::TiledLUppSchedule Sched, bool internal_rhs,
          bool internal_piv, bool internal_matrix>
 struct ResidencyRunner {
     static_assert(N <= 32, "the runner keeps internal storage on the stack");
@@ -69,7 +69,7 @@ struct ResidencyRunner {
     /// \return false on a singular matrix.
     static bool run(const T* A0, const T* b0, const SolvePath path, T* A_out, int* piv_out,
                     T* x_out, int& oot) {
-        using Solver = tdls::TiledLuSolverStatic<T, N, tdls::TiledLuConfig<T, TS, Sched>>;
+        using Solver = tdls::TiledLUppSolverStatic<T, N, tdls::TiledLUppConfig<T, TS, Sched>>;
 
         // Matrix storage.
         [[maybe_unused]] T A_local[N * N];

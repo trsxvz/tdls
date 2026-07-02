@@ -2,7 +2,7 @@
 /// \brief Bridge suite: batched layouts are equivalent.
 /// \author Tristan Chenaille
 ///
-/// In external mode, the solvers see every batched layout through the
+/// In external mode, the TiledLUpp solvers see every batched layout through the
 /// same (pre-offset pointer, element stride) pair: AoS is stride 1, SoA
 /// is stride count, AoSoA is stride W. On identical inputs, the three
 /// layouts must therefore produce bitwise-identical factored matrices,
@@ -134,17 +134,17 @@ void layouts_case(const int count, const double bound, const std::uint64_t seed)
 }
 
 /// \brief Static-solver front end of layouts_case.
-template<typename T, int N, int TS, tdls::TiledLuSchedule Sched>
+template<typename T, int N, int TS, tdls::TiledLUppSchedule Sched>
 void layouts_case_static(const int count, const double bound, const std::uint64_t seed) {
-    using Solver = tdls::TiledLuSolverStatic<T, N, tdls::TiledLuConfig<T, TS, Sched>>;
+    using Solver = tdls::TiledLUppSolverStatic<T, N, tdls::TiledLUppConfig<T, TS, Sched>>;
     layouts_case<Solver, T, N>(count, bound, seed);
 }
 
-/// \brief Adapts the dynamic solver to the static entry-point shape used
+/// \brief Adapts the dynamic TiledLUpp solver to the static entry-point shape used
 /// by run_layout, so both solvers share the same layout plumbing.
 template<typename T, int N, int TS>
 struct DynamicFrontEnd {
-    using Solver = tdls::TiledLuSolverDynamic<T, tdls::TiledLuConfig<T, TS>>;
+    using Solver = tdls::TiledLUppSolverDynamic<T, tdls::TiledLUppConfig<T, TS>>;
     template<bool, bool>
     static bool factorize(T* A, const int a_stride, int* piv, const int piv_stride) {
         return Solver::factorize(N, A, a_stride, piv, piv_stride);
@@ -158,22 +158,22 @@ struct DynamicFrontEnd {
 
 } // namespace
 
-TDLS_TEST_CASE("bridge/layouts/static/double/N=12,TS=3,RL,default") {
-    layouts_case_static<double, 12, 3, tdls::TiledLuSchedule::RightLooking>(200, 0.5, 140100);
+TDLS_TEST_CASE("tiledlupp/bridge/layouts/static/double/N=12,TS=3,RL,default") {
+    layouts_case_static<double, 12, 3, tdls::TiledLUppSchedule::RightLooking>(200, 0.5, 140100);
 }
-TDLS_TEST_CASE("bridge/layouts/static/double/N=12,TS=3,RL,stress") {
-    layouts_case_static<double, 12, 3, tdls::TiledLuSchedule::RightLooking>(200, 5e-10, 140200);
+TDLS_TEST_CASE("tiledlupp/bridge/layouts/static/double/N=12,TS=3,RL,stress") {
+    layouts_case_static<double, 12, 3, tdls::TiledLUppSchedule::RightLooking>(200, 5e-10, 140200);
 }
-TDLS_TEST_CASE("bridge/layouts/static/double/N=13,TS=6,LL,default") {
-    layouts_case_static<double, 13, 6, tdls::TiledLuSchedule::LeftLooking>(200, 0.5, 140300);
+TDLS_TEST_CASE("tiledlupp/bridge/layouts/static/double/N=13,TS=6,LL,default") {
+    layouts_case_static<double, 13, 6, tdls::TiledLUppSchedule::LeftLooking>(200, 0.5, 140300);
 }
-TDLS_TEST_CASE("bridge/layouts/static/double/N=33,TS=5,RL,default") {
-    layouts_case_static<double, 33, 5, tdls::TiledLuSchedule::RightLooking>(100, 0.5, 140400);
+TDLS_TEST_CASE("tiledlupp/bridge/layouts/static/double/N=33,TS=5,RL,default") {
+    layouts_case_static<double, 33, 5, tdls::TiledLUppSchedule::RightLooking>(100, 0.5, 140400);
 }
-TDLS_TEST_CASE("bridge/layouts/static/float/N=12,TS=3,RL,default") {
-    layouts_case_static<float, 12, 3, tdls::TiledLuSchedule::RightLooking>(200, 0.5, 140500);
+TDLS_TEST_CASE("tiledlupp/bridge/layouts/static/float/N=12,TS=3,RL,default") {
+    layouts_case_static<float, 12, 3, tdls::TiledLUppSchedule::RightLooking>(200, 0.5, 140500);
 }
-TDLS_TEST_CASE("bridge/layouts/dynamic/double/n=13,TS=6,default") {
+TDLS_TEST_CASE("tiledlupp/bridge/layouts/dynamic/double/n=13,TS=6,default") {
     layouts_case<DynamicFrontEnd<double, 13, 6>, double, 13>(200, 0.5, 140600);
 }
 

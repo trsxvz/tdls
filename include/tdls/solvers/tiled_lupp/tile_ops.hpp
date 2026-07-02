@@ -1,10 +1,10 @@
-#ifndef TDLS_SOLVERS_TILED_LU_TILE_OPS_HPP
-#define TDLS_SOLVERS_TILED_LU_TILE_OPS_HPP
+#ifndef TDLS_SOLVERS_TILED_LUPP_TILE_OPS_HPP
+#define TDLS_SOLVERS_TILED_LUPP_TILE_OPS_HPP
 
 
 
 /// \file
-/// \brief Register-tile micro-kernels of the tiled LU solver.
+/// \brief Register-tile micro-kernels of the TiledLUpp solver.
 /// \author Tristan Chenaille
 ///
 /// Building blocks shared by the right- and left-looking schedules. A tile
@@ -13,7 +13,8 @@
 /// loop, so phantom slots are never read or written and cost nothing.
 ///
 /// These operate on register arrays only - remote-memory movement lives in
-/// the solvers (solver_static.hpp, solver_dynamic.hpp), next to the addressing macros.
+/// the TiledLUpp solvers (solver_static.hpp, solver_dynamic.hpp), next to the
+/// addressing macros.
 ///
 /// Every loop is subject to the `unroll_inner` knob: with it, the loops
 /// must effectively unroll or the tiles are demoted to local memory on GPU
@@ -43,9 +44,9 @@ namespace tdls {
 /// \brief TSxTS register-tile micro-kernels.
 /// \tparam T            scalar type
 /// \tparam TS           tile extent (row stride of the register tiles)
-/// \tparam unroll_inner unroll knob, forwarded from the solver Config
+/// \tparam unroll_inner unroll knob, forwarded from the TiledLUpp solver configuration
 template<typename T, int TS, bool unroll_inner>
-struct TiledLuTileOps {
+struct TiledLUppTileOps {
 
     /// \brief Row swap k <-> r, compile-time indexed on both sides.
     ///
@@ -231,4 +232,4 @@ struct TiledLuTileOps {
 
 
 
-#endif // TDLS_SOLVERS_TILED_LU_TILE_OPS_HPP
+#endif // TDLS_SOLVERS_TILED_LUPP_TILE_OPS_HPP

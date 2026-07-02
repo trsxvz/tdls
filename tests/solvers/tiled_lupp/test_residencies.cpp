@@ -31,7 +31,7 @@ namespace {
 /// \tparam internal_piv    residency of the pivot under test
 /// \tparam internal_matrix residency of the matrix under test
 /// \param[in] batch input systems
-template<typename T, int N, int TS, tdls::TiledLuSchedule Sched, bool internal_rhs,
+template<typename T, int N, int TS, tdls::TiledLUppSchedule Sched, bool internal_rhs,
          bool internal_piv, bool internal_matrix>
 void compare_to_baseline(const tdls_tests::SystemBatch<T>& batch) {
     using Baseline = tdls_tests::ResidencyRunner<T, N, TS, Sched, false, false, false>;
@@ -65,7 +65,7 @@ void compare_to_baseline(const tdls_tests::SystemBatch<T>& batch) {
 /// \param[in] count number of systems
 /// \param[in] bound half-width of the entry distribution
 /// \param[in] seed  generator seed
-template<typename T, int N, int TS, tdls::TiledLuSchedule Sched>
+template<typename T, int N, int TS, tdls::TiledLUppSchedule Sched>
 void all_combos_case(const int count, const double bound, const std::uint64_t seed) {
     const auto batch = tdls_tests::make_batch<T>(N, count, seed, bound);
     compare_to_baseline<T, N, TS, Sched, false, false, true>(batch);
@@ -79,26 +79,26 @@ void all_combos_case(const int count, const double bound, const std::uint64_t se
 
 } // namespace
 
-TDLS_TEST_CASE("bridge/residencies/double/N=12,TS=3,RL,default") {
-    all_combos_case<double, 12, 3, tdls::TiledLuSchedule::RightLooking>(200, 0.5, 130100);
+TDLS_TEST_CASE("tiledlupp/bridge/residencies/double/N=12,TS=3,RL,default") {
+    all_combos_case<double, 12, 3, tdls::TiledLUppSchedule::RightLooking>(200, 0.5, 130100);
 }
-TDLS_TEST_CASE("bridge/residencies/double/N=12,TS=3,RL,stress") {
-    all_combos_case<double, 12, 3, tdls::TiledLuSchedule::RightLooking>(200, 5e-10, 130200);
+TDLS_TEST_CASE("tiledlupp/bridge/residencies/double/N=12,TS=3,RL,stress") {
+    all_combos_case<double, 12, 3, tdls::TiledLUppSchedule::RightLooking>(200, 5e-10, 130200);
 }
-TDLS_TEST_CASE("bridge/residencies/double/N=12,TS=3,LL,stress") {
-    all_combos_case<double, 12, 3, tdls::TiledLuSchedule::LeftLooking>(200, 5e-10, 130300);
+TDLS_TEST_CASE("tiledlupp/bridge/residencies/double/N=12,TS=3,LL,stress") {
+    all_combos_case<double, 12, 3, tdls::TiledLUppSchedule::LeftLooking>(200, 5e-10, 130300);
 }
-TDLS_TEST_CASE("bridge/residencies/double/N=13,TS=6,RL,default") {
-    all_combos_case<double, 13, 6, tdls::TiledLuSchedule::RightLooking>(200, 0.5, 130400);
+TDLS_TEST_CASE("tiledlupp/bridge/residencies/double/N=13,TS=6,RL,default") {
+    all_combos_case<double, 13, 6, tdls::TiledLUppSchedule::RightLooking>(200, 0.5, 130400);
 }
-TDLS_TEST_CASE("bridge/residencies/double/N=13,TS=6,LL,default") {
-    all_combos_case<double, 13, 6, tdls::TiledLuSchedule::LeftLooking>(200, 0.5, 130500);
+TDLS_TEST_CASE("tiledlupp/bridge/residencies/double/N=13,TS=6,LL,default") {
+    all_combos_case<double, 13, 6, tdls::TiledLUppSchedule::LeftLooking>(200, 0.5, 130500);
 }
-TDLS_TEST_CASE("bridge/residencies/double/N=7,TS=4,RL,default") {
-    all_combos_case<double, 7, 4, tdls::TiledLuSchedule::RightLooking>(200, 0.5, 130600);
+TDLS_TEST_CASE("tiledlupp/bridge/residencies/double/N=7,TS=4,RL,default") {
+    all_combos_case<double, 7, 4, tdls::TiledLUppSchedule::RightLooking>(200, 0.5, 130600);
 }
-TDLS_TEST_CASE("bridge/residencies/float/N=12,TS=3,RL,default") {
-    all_combos_case<float, 12, 3, tdls::TiledLuSchedule::RightLooking>(200, 0.5, 130700);
+TDLS_TEST_CASE("tiledlupp/bridge/residencies/float/N=12,TS=3,RL,default") {
+    all_combos_case<float, 12, 3, tdls::TiledLUppSchedule::RightLooking>(200, 0.5, 130700);
 }
 
 TDLS_TEST_MAIN

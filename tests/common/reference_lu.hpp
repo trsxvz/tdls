@@ -9,13 +9,13 @@
 /// \author Tristan Chenaille
 ///
 /// Deliberately naive dense LU with partial pivoting on contiguous
-/// row-major storage, written independently from the tiled solvers:
+/// row-major storage, written independently from the TiledLUpp solvers:
 /// scalar elimination, physical row swaps, true pivot values on the
 /// diagonal (not their reciprocals). Results are therefore NOT bitwise
-/// comparable with the tiled solvers; the anchor metric is the normwise
+/// comparable with the TiledLUpp solvers; the anchor metric is the normwise
 /// backward error below.
 ///
-/// The singularity criterion mirrors the solvers (best pivot below
+/// The singularity criterion mirrors the TiledLUpp solvers (best pivot below
 /// numeric_limits::min(), i.e. zero or subnormal) so that verdicts can be
 /// compared exactly.
 

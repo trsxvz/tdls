@@ -38,7 +38,7 @@ namespace {
 /// \param[in] piv_ref  baseline pivot
 /// \param[in] x_ref    baseline solution
 /// \param[in] oot_ref  baseline out-of-tile counter
-template<typename T, int N, int TS, tdls::TiledLuSchedule Sched, bool internal_rhs,
+template<typename T, int N, int TS, tdls::TiledLUppSchedule Sched, bool internal_rhs,
          bool internal_piv, bool internal_matrix>
 void check_variant(const T* A0, const T* b0, const tdls_tests::SolvePath path, const bool ok_ref,
                    const T* A_ref, const int* piv_ref, const T* x_ref, const int oot_ref) {
@@ -64,7 +64,7 @@ void check_variant(const T* A0, const T* b0, const tdls_tests::SolvePath path, c
 /// \param[in] count number of systems
 /// \param[in] bound half-width of the entry distribution
 /// \param[in] seed  generator seed
-template<typename T, int N, int TS, tdls::TiledLuSchedule Sched>
+template<typename T, int N, int TS, tdls::TiledLUppSchedule Sched>
 void cross_case(const int count, const double bound, const std::uint64_t seed) {
     using Baseline   = tdls_tests::ResidencyRunner<T, N, TS, Sched, false, false, false>;
     const auto batch = tdls_tests::make_batch<T>(N, count, seed, bound);
@@ -104,23 +104,23 @@ void cross_case(const int count, const double bound, const std::uint64_t seed) {
 
 } // namespace
 
-TDLS_TEST_CASE("cross-full/double/N=12,TS=3,RL,default") {
-    cross_case<double, 12, 3, tdls::TiledLuSchedule::RightLooking>(60, 0.5, 220100);
+TDLS_TEST_CASE("tiledlupp/cross-full/double/N=12,TS=3,RL,default") {
+    cross_case<double, 12, 3, tdls::TiledLUppSchedule::RightLooking>(60, 0.5, 220100);
 }
-TDLS_TEST_CASE("cross-full/double/N=12,TS=3,RL,stress") {
-    cross_case<double, 12, 3, tdls::TiledLuSchedule::RightLooking>(60, 5e-10, 220200);
+TDLS_TEST_CASE("tiledlupp/cross-full/double/N=12,TS=3,RL,stress") {
+    cross_case<double, 12, 3, tdls::TiledLUppSchedule::RightLooking>(60, 5e-10, 220200);
 }
-TDLS_TEST_CASE("cross-full/double/N=12,TS=3,LL,default") {
-    cross_case<double, 12, 3, tdls::TiledLuSchedule::LeftLooking>(60, 0.5, 220300);
+TDLS_TEST_CASE("tiledlupp/cross-full/double/N=12,TS=3,LL,default") {
+    cross_case<double, 12, 3, tdls::TiledLUppSchedule::LeftLooking>(60, 0.5, 220300);
 }
-TDLS_TEST_CASE("cross-full/double/N=13,TS=6,RL,default") {
-    cross_case<double, 13, 6, tdls::TiledLuSchedule::RightLooking>(60, 0.5, 220400);
+TDLS_TEST_CASE("tiledlupp/cross-full/double/N=13,TS=6,RL,default") {
+    cross_case<double, 13, 6, tdls::TiledLUppSchedule::RightLooking>(60, 0.5, 220400);
 }
-TDLS_TEST_CASE("cross-full/double/N=13,TS=6,LL,default") {
-    cross_case<double, 13, 6, tdls::TiledLuSchedule::LeftLooking>(60, 0.5, 220500);
+TDLS_TEST_CASE("tiledlupp/cross-full/double/N=13,TS=6,LL,default") {
+    cross_case<double, 13, 6, tdls::TiledLUppSchedule::LeftLooking>(60, 0.5, 220500);
 }
-TDLS_TEST_CASE("cross-full/double/N=13,TS=6,LL,stress") {
-    cross_case<double, 13, 6, tdls::TiledLuSchedule::LeftLooking>(60, 5e-10, 220600);
+TDLS_TEST_CASE("tiledlupp/cross-full/double/N=13,TS=6,LL,stress") {
+    cross_case<double, 13, 6, tdls::TiledLUppSchedule::LeftLooking>(60, 5e-10, 220600);
 }
 
 TDLS_TEST_MAIN

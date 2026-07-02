@@ -14,7 +14,7 @@
 /// failed cases (0 on success), which is what ctest consumes. An optional
 /// command-line argument keeps only the cases whose name contains it:
 ///
-///   ./tdls_test_oracle_static N=12
+///   ./tdls_test_tiledlupp_oracle_static N=12
 ///
 /// The macro vocabulary (TEST_CASE / CHECK) matches mainstream frameworks
 /// on purpose, so the suites could migrate with little churn if the

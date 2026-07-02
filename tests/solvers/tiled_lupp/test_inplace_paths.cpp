@@ -34,9 +34,9 @@ namespace {
 /// \param[in] seed  generator seed
 template<typename T, int N, int TS>
 void inplace_case(const int count, const double bound, const std::uint64_t seed) {
-    using Config     = tdls::TiledLuConfig<T, TS>;
-    using Static     = tdls::TiledLuSolverStatic<T, N, Config>;
-    using Dynamic    = tdls::TiledLuSolverDynamic<T, Config>;
+    using Config     = tdls::TiledLUppConfig<T, TS>;
+    using Static     = tdls::TiledLUppSolverStatic<T, N, Config>;
+    using Dynamic    = tdls::TiledLUppSolverDynamic<T, Config>;
     const auto batch = tdls_tests::make_batch<T>(N, count, seed, bound);
 
     std::vector<T> A_static(static_cast<std::size_t>(N) * N);
@@ -70,7 +70,7 @@ void inplace_case(const int count, const double bound, const std::uint64_t seed)
 
 /// Emits the in-place bridge case of one (N, TS, regime) cell.
 #define TDLS_INPLACE_CASE(N, TS, REGIME, COUNT, BOUND, SEED)                                       \
-    TDLS_TEST_CASE("bridge/inplace/double/N=" #N ",TS=" #TS "," REGIME) {                          \
+    TDLS_TEST_CASE("tiledlupp/bridge/inplace/double/N=" #N ",TS=" #TS "," REGIME) {                \
         inplace_case<double, N, TS>(COUNT, BOUND, SEED);                                           \
     }
 

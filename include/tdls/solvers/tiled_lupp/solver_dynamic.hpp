@@ -1,34 +1,34 @@
-#ifndef TDLS_SOLVERS_TILED_LU_SOLVER_DYNAMIC_HPP
-#define TDLS_SOLVERS_TILED_LU_SOLVER_DYNAMIC_HPP
+#ifndef TDLS_SOLVERS_TILED_LUPP_SOLVER_DYNAMIC_HPP
+#define TDLS_SOLVERS_TILED_LUPP_SOLVER_DYNAMIC_HPP
 
 
 
 /// \file
-/// \brief Runtime-size variant of the tiled LU solver.
+/// \brief Runtime-size variant of the TiledLUpp solver.
 /// \author Tristan Chenaille
 ///
-/// Same algorithm as TiledLuSolverStatic (solver_static.hpp) - tiled LU with logical
+/// Same algorithm as TiledLUppSolverStatic (solver_static.hpp) - tiled LU with logical
 /// partial pivoting, out-of-tile recovery, reciprocal-diagonal factored
 /// format, right- and left-looking schedules - but the system dimension n
 /// is a runtime function parameter instead of a template parameter. Only
-/// the tile size (TiledSolverConfig::tile_size) stays compile-time:
+/// the tile size (TiledLUppSolverConfig::tile_size) stays compile-time:
 /// register tiles keep a fixed TSxTS footprint, while all loop bounds
 /// over tiles and inside partial tiles are runtime values.
 ///
 /// Deliberate differences with the compile-time solver:
 ///   - No unroll pragma anywhere: with runtime bounds nothing can be
 ///     register-resident by full unrolling, so the unroll_inner knob of
-///     TiledSolverConfig is ignored.
+///     TiledLUppSolverConfig is ignored.
 ///   - No internal_rhs / internal_piv / internal_matrix booleans: without
 ///     unrolling, the internal residency mode degenerates into "external
 ///     with stride 1", so every array is plain pointer + stride. The
-///     predicated register gathers/swaps of the static solver become
+///     predicated register gathers/swaps of the static TiledLUpp solver become
 ///     direct indexed accesses (same values, simpler code).
 ///   - substitute_inplace dispatches at runtime (warp-uniform: n is the
 ///     same for every lane): a 64-bit visited bitmask up to n = 64, a
 ///     cycle-leader scan beyond - zero extra storage and no ceiling on n.
 ///
-/// For equal shapes (same n, TS, schedule, TiledSolverConfig thresholds), results are
+/// For equal shapes (same n, TS, schedule, TiledLUppSolverConfig thresholds), results are
 /// bitwise identical to the compile-time solver: the arithmetic sequence
 /// is the same, only addressing and loop mechanics differ.
 ///
@@ -42,7 +42,7 @@
 
 #include <cmath>
 
-#include <tdls/solvers/tiled_lu/config.hpp>
+#include <tdls/solvers/tiled_lupp/config.hpp>
 
 
 
@@ -64,12 +64,12 @@ namespace tdls {
    parameter names (A, A_stride, piv, piv_stride, x, b, y, rhs_stride,
    xcol_stride) are in scope. #undef'd at the end of this header. */
 
-#define TDLS_DYN_A(r, c)  A[((r) * n + (c)) * A_stride]
-#define TDLS_DYN_PIV(i)   piv[(i) * piv_stride]
-#define TDLS_DYN_X(i)     x[(i) * rhs_stride]
-#define TDLS_DYN_B(i)     b[(i) * rhs_stride]
-#define TDLS_DYN_XW(w, i) x[(i) * rhs_stride + (w) * xcol_stride]
-#define TDLS_DYN_Y(i)     y[(i) * rhs_stride]
+#define TDLS_LUPP_DYN_A(r, c)  A[((r) * n + (c)) * A_stride]
+#define TDLS_LUPP_DYN_PIV(i)   piv[(i) * piv_stride]
+#define TDLS_LUPP_DYN_X(i)     x[(i) * rhs_stride]
+#define TDLS_LUPP_DYN_B(i)     b[(i) * rhs_stride]
+#define TDLS_LUPP_DYN_XW(w, i) x[(i) * rhs_stride + (w) * xcol_stride]
+#define TDLS_LUPP_DYN_Y(i)     y[(i) * rhs_stride]
 
 
 
@@ -88,23 +88,23 @@ namespace tdls {
 ///   - solve_fused:           factorize with the forward pass folded in
 ///
 /// The factored diagonal holds the RECIPROCALS of the U pivots, exactly as
-/// in TiledLuSolverStatic: a factorization produced here must be consumed by the
+/// in TiledLUppSolverStatic: a factorization produced here must be consumed by the
 /// substitution routines of this family.
 ///
 /// \tparam T                 scalar type (float or double)
-/// \tparam TiledSolverConfig compile-time knobs - tile size (may exceed
-///         n), schedule, pivoting thresholds; see TiledLuDefaultConfig and
-///         TiledLuConfig (unroll_inner is ignored by this variant)
-template<typename T, typename TiledSolverConfig = TiledLuDefaultConfig<T>>
-struct TiledLuSolverDynamic {
+/// \tparam TiledLUppSolverConfig compile-time knobs - tile size (may exceed
+///         n), schedule, pivoting thresholds; see TiledLUppDefaultConfig and
+///         TiledLUppConfig (unroll_inner is ignored by this variant)
+template<typename T, typename TiledLUppSolverConfig = TiledLUppDefaultConfig<T>>
+struct TiledLUppSolverDynamic {
 
-    static constexpr int TS                = TiledSolverConfig::tile_size;
-    static constexpr TiledLuSchedule Sched = TiledSolverConfig::schedule;
+    static constexpr int TS                  = TiledLUppSolverConfig::tile_size;
+    static constexpr TiledLUppSchedule Sched = TiledLUppSolverConfig::schedule;
 
-    static_assert(TiledSolverConfig::singular_eps <= TiledSolverConfig::oot_threshold,
-                  "TiledLuSolverDynamic: singular_eps must not exceed oot_threshold (the "
+    static_assert(TiledLUppSolverConfig::singular_eps <= TiledLUppSolverConfig::oot_threshold,
+                  "TiledLUppSolverDynamic: singular_eps must not exceed oot_threshold (the "
                   "floor applies to the out-of-tile recovery path)");
-    static_assert(TS >= 2, "TiledLuSolverDynamic: tile size must be >= 2");
+    static_assert(TS >= 2, "TiledLUppSolverDynamic: tile size must be >= 2");
 
     /// \brief Number of tiles per dimension (last one possibly partial).
     /// \param[in] n system dimension
@@ -240,7 +240,7 @@ struct TiledLuSolverDynamic {
                                                             const int re, const int ce) {
         for (int i = 0; i < re; ++i) {
             for (int j = 0; j < ce; ++j)
-                t[i * TS + j] = TDLS_DYN_A(prow[i], col0 + j);
+                t[i * TS + j] = TDLS_LUPP_DYN_A(prow[i], col0 + j);
         }
     }
 
@@ -258,7 +258,7 @@ struct TiledLuSolverDynamic {
                const int col0, const T* TDLS_RESTRICT t, const int re, const int ce) {
         for (int i = 0; i < re; ++i) {
             for (int j = 0; j < ce; ++j)
-                TDLS_DYN_A(prow[i], col0 + j) = t[i * TS + j];
+                TDLS_LUPP_DYN_A(prow[i], col0 + j) = t[i * TS + j];
         }
     }
 
@@ -279,9 +279,9 @@ struct TiledLuSolverDynamic {
                   const int* TDLS_RESTRICT piv, const int piv_stride, const int row0,
                   const int col0, T* TDLS_RESTRICT t, const int re, const int ce) {
         for (int i = 0; i < re; ++i) {
-            const int phys = TDLS_DYN_PIV(row0 + i);
+            const int phys = TDLS_LUPP_DYN_PIV(row0 + i);
             for (int j = 0; j < ce; ++j)
-                t[i * TS + j] = TDLS_DYN_A(phys, col0 + j);
+                t[i * TS + j] = TDLS_LUPP_DYN_A(phys, col0 + j);
         }
     }
 
@@ -302,9 +302,9 @@ struct TiledLuSolverDynamic {
                    const int* TDLS_RESTRICT piv, const int piv_stride, const int row0,
                    const int col0, const T* TDLS_RESTRICT t, const int re, const int ce) {
         for (int i = 0; i < re; ++i) {
-            const int phys = TDLS_DYN_PIV(row0 + i);
+            const int phys = TDLS_LUPP_DYN_PIV(row0 + i);
             for (int j = 0; j < ce; ++j)
-                TDLS_DYN_A(phys, col0 + j) = t[i * TS + j];
+                TDLS_LUPP_DYN_A(phys, col0 + j) = t[i * TS + j];
         }
     }
 
@@ -324,9 +324,9 @@ struct TiledLuSolverDynamic {
                         const int* TDLS_RESTRICT piv, const int piv_stride, const int row0,
                         const int col0, T* TDLS_RESTRICT t, const int re) {
         for (int i = 1; i < re; ++i) {
-            const int phys = TDLS_DYN_PIV(row0 + i);
+            const int phys = TDLS_LUPP_DYN_PIV(row0 + i);
             for (int j = 0; j < i; ++j)
-                t[i * TS + j] = TDLS_DYN_A(phys, col0 + j);
+                t[i * TS + j] = TDLS_LUPP_DYN_A(phys, col0 + j);
         }
     }
 
@@ -347,15 +347,15 @@ struct TiledLuSolverDynamic {
                         const int* TDLS_RESTRICT piv, const int piv_stride, const int row0,
                         const int col0, T* TDLS_RESTRICT t, const int re) {
         for (int i = 0; i < re; ++i) {
-            const int phys = TDLS_DYN_PIV(row0 + i);
+            const int phys = TDLS_LUPP_DYN_PIV(row0 + i);
             for (int j = i; j < re; ++j)
-                t[i * TS + j] = TDLS_DYN_A(phys, col0 + j);
+                t[i * TS + j] = TDLS_LUPP_DYN_A(phys, col0 + j);
         }
     }
 
     /* =====================================================================
        Diagonal-tile factorization with out-of-tile pivoting. Same
-       algorithm as the static solver, runtime column/extent parameters,
+       algorithm as the static TiledLUpp solver, runtime column/extent parameters,
        direct (unpredicated) fused-RHS swap.
        ===================================================================== */
 
@@ -398,44 +398,44 @@ struct TiledLuSolverDynamic {
 
         int piv_row; // winning global (logical) row
 
-        if (best >= TiledSolverConfig::oot_threshold) {
+        if (best >= TiledLUppSolverConfig::oot_threshold) {
             piv_row = k0 + best_r;
         } else if (ke < TS) {
             // Trailing tile: no rows below to recover from. Diagnostic
             // order: singularity verdict first, then count the weak pivot
             // (full tiles count before the verdict).
-            if (best < TiledSolverConfig::singular_eps) return false;
+            if (best < TiledLUppSolverConfig::singular_eps) return false;
             if constexpr (oot_diag) ++oot_count;
             piv_row = k0 + best_r;
         } else {
             // Out-of-tile recovery: scan the rows below the tile and
             // evaluate each candidate as if it had received the
             // eliminations it is missing, keeping the best (or, with
-            // TiledSolverConfig::oot_first_acceptable, the first to reach the threshold).
+            // TiledLUppSolverConfig::oot_first_acceptable, the first to reach the threshold).
             if constexpr (oot_diag) ++oot_count;
             T gbest       = best;
             int gbest_row = k0 + best_r;
 
             for (int row = k0 + ke; row < n; ++row) {
-                const int phys = TDLS_DYN_PIV(row);
+                const int phys = TDLS_LUPP_DYN_PIV(row);
 
-                T corrected = TDLS_DYN_A(phys, gc);
-                if constexpr (Sched == TiledLuSchedule::LeftLooking) {
+                T corrected = TDLS_LUPP_DYN_A(phys, gc);
+                if constexpr (Sched == TiledLUppSchedule::LeftLooking) {
                     for (int bj0 = 0; bj0 < k0; bj0 += TS)
                         for (int p = 0; p < TS; ++p)
-                            corrected -=
-                                TDLS_DYN_A(phys, bj0 + p) * TDLS_DYN_A(TDLS_DYN_PIV(bj0 + p), gc);
+                            corrected -= TDLS_LUPP_DYN_A(phys, bj0 + p) *
+                                         TDLS_LUPP_DYN_A(TDLS_LUPP_DYN_PIV(bj0 + p), gc);
                 }
 
                 if (c > 0) {
                     T L_row[TS];
                     for (int t = 0; t < c; ++t) {
-                        T a_t = TDLS_DYN_A(phys, k0 + t);
-                        if constexpr (Sched == TiledLuSchedule::LeftLooking) {
+                        T a_t = TDLS_LUPP_DYN_A(phys, k0 + t);
+                        if constexpr (Sched == TiledLUppSchedule::LeftLooking) {
                             for (int bj0 = 0; bj0 < k0; bj0 += TS)
                                 for (int p = 0; p < TS; ++p)
-                                    a_t -= TDLS_DYN_A(phys, bj0 + p) *
-                                           TDLS_DYN_A(TDLS_DYN_PIV(bj0 + p), k0 + t);
+                                    a_t -= TDLS_LUPP_DYN_A(phys, bj0 + p) *
+                                           TDLS_LUPP_DYN_A(TDLS_LUPP_DYN_PIV(bj0 + p), k0 + t);
                         }
                         for (int p = 0; p < t; ++p)
                             a_t -= L_row[p] * tile[p * TS + t];
@@ -453,26 +453,26 @@ struct TiledLuSolverDynamic {
                 // First-acceptable out-of-tile pivot: a candidate that
                 // reaches the threshold already beats the sub-threshold
                 // in-tile pivot, so stop scanning.
-                if constexpr (TiledSolverConfig::oot_first_acceptable)
-                    if (v >= TiledSolverConfig::oot_threshold) break;
+                if constexpr (TiledLUppSolverConfig::oot_first_acceptable)
+                    if (v >= TiledLUppSolverConfig::oot_threshold) break;
             }
 
-            if (gbest < TiledSolverConfig::singular_eps) return false;
+            if (gbest < TiledLUppSolverConfig::singular_eps) return false;
             piv_row = gbest_row;
         }
 
         {
             // Swap the permutation entries unconditionally (self-swap is a
             // bitwise no-op, and the branch would diverge on GPU).
-            const int tmp         = TDLS_DYN_PIV(gc);
-            TDLS_DYN_PIV(gc)      = TDLS_DYN_PIV(piv_row);
-            TDLS_DYN_PIV(piv_row) = tmp;
+            const int tmp              = TDLS_LUPP_DYN_PIV(gc);
+            TDLS_LUPP_DYN_PIV(gc)      = TDLS_LUPP_DYN_PIV(piv_row);
+            TDLS_LUPP_DYN_PIV(piv_row) = tmp;
 
             if constexpr (fuse_rhs) {
                 // The fused RHS follows the rows through pivoting.
-                const T ty          = TDLS_DYN_Y(gc);
-                TDLS_DYN_Y(gc)      = TDLS_DYN_Y(piv_row);
-                TDLS_DYN_Y(piv_row) = ty;
+                const T ty               = TDLS_LUPP_DYN_Y(gc);
+                TDLS_LUPP_DYN_Y(gc)      = TDLS_LUPP_DYN_Y(piv_row);
+                TDLS_LUPP_DYN_Y(piv_row) = ty;
             }
 
             if (piv_row < k0 + ke) {
@@ -481,14 +481,15 @@ struct TiledLuSolverDynamic {
                 // Cross-tile swap: pull the new row into the tile and
                 // replay everything it missed - prior tiles (LL), then
                 // the current tile's factored columns, on the FULL row.
-                const int phys = TDLS_DYN_PIV(gc);
+                const int phys = TDLS_LUPP_DYN_PIV(gc);
                 for (int j = 0; j < ke; ++j) {
-                    tile[c * TS + j] = TDLS_DYN_A(phys, k0 + j);
-                    if constexpr (Sched == TiledLuSchedule::LeftLooking) {
+                    tile[c * TS + j] = TDLS_LUPP_DYN_A(phys, k0 + j);
+                    if constexpr (Sched == TiledLUppSchedule::LeftLooking) {
                         for (int bj0 = 0; bj0 < k0; bj0 += TS)
                             for (int p = 0; p < TS; ++p)
-                                tile[c * TS + j] -= TDLS_DYN_A(phys, bj0 + p) *
-                                                    TDLS_DYN_A(TDLS_DYN_PIV(bj0 + p), k0 + j);
+                                tile[c * TS + j] -=
+                                    TDLS_LUPP_DYN_A(phys, bj0 + p) *
+                                    TDLS_LUPP_DYN_A(TDLS_LUPP_DYN_PIV(bj0 + p), k0 + j);
                     }
                 }
 
@@ -589,7 +590,7 @@ struct TiledLuSolverDynamic {
         for (int p = 0; p < ke; ++p) {
             T Akj_row[TS];
             for (int j = 0; j < je; ++j)
-                Akj_row[j] = TDLS_DYN_A(pk[p], j0 + j);
+                Akj_row[j] = TDLS_LUPP_DYN_A(pk[p], j0 + j);
             for (int i = 0; i < ie; ++i) {
                 const T L_ip = Aik[i * TS + p];
                 for (int j = 0; j < je; ++j)
@@ -628,7 +629,7 @@ struct TiledLuSolverDynamic {
 
         int pi[TS];
         for (int i = 0; i < ie; ++i)
-            pi[i] = TDLS_DYN_PIV(i0 + i);
+            pi[i] = TDLS_LUPP_DYN_PIV(i0 + i);
 
         // TRSM down: Aik := Aik * U^-1
         T Aik[TS * TS];
@@ -642,8 +643,8 @@ struct TiledLuSolverDynamic {
             for (int r = 0; r < ie; ++r) {
                 T sum = T(0);
                 for (int j = 0; j < ke; ++j)
-                    sum += Aik[r * TS + j] * TDLS_DYN_Y(k0 + j);
-                TDLS_DYN_Y(i0 + r) -= sum;
+                    sum += Aik[r * TS + j] * TDLS_LUPP_DYN_Y(k0 + j);
+                TDLS_LUPP_DYN_Y(i0 + r) -= sum;
             }
         }
 
@@ -685,7 +686,7 @@ struct TiledLuSolverDynamic {
         // Physical rows of the tile after the swaps of this step
         int pk[TS];
         for (int i = 0; i < ke; ++i)
-            pk[i] = TDLS_DYN_PIV(k0 + i);
+            pk[i] = TDLS_LUPP_DYN_PIV(k0 + i);
 
         store_tile(n, A, A_stride, pk, k0, tile, ke, ke);
 
@@ -694,7 +695,7 @@ struct TiledLuSolverDynamic {
         if constexpr (fuse_rhs) {
             for (int kk = 0; kk < ke; ++kk) {
                 for (int i = kk + 1; i < ke; ++i)
-                    TDLS_DYN_Y(k0 + i) -= tile[i * TS + kk] * TDLS_DYN_Y(k0 + kk);
+                    TDLS_LUPP_DYN_Y(k0 + i) -= tile[i * TS + kk] * TDLS_LUPP_DYN_Y(k0 + kk);
             }
         }
 
@@ -773,8 +774,8 @@ struct TiledLuSolverDynamic {
             for (int r = 0; r < ie; ++r) {
                 T sum = T(0);
                 for (int j = 0; j < ke; ++j)
-                    sum += B[r * TS + j] * TDLS_DYN_Y(k0 + j);
-                TDLS_DYN_Y(i0 + r) -= sum;
+                    sum += B[r * TS + j] * TDLS_LUPP_DYN_Y(k0 + j);
+                TDLS_LUPP_DYN_Y(i0 + r) -= sum;
             }
         }
     }
@@ -840,7 +841,7 @@ struct TiledLuSolverDynamic {
         if constexpr (fuse_rhs) {
             for (int kk = 0; kk < ke; ++kk) {
                 for (int i = kk + 1; i < ke; ++i)
-                    TDLS_DYN_Y(k0 + i) -= tile[i * TS + kk] * TDLS_DYN_Y(k0 + kk);
+                    TDLS_LUPP_DYN_Y(k0 + i) -= tile[i * TS + kk] * TDLS_LUPP_DYN_Y(k0 + kk);
             }
         }
 
@@ -889,11 +890,11 @@ struct TiledLuSolverDynamic {
         if constexpr (oot_diag) oot_count = 0;
 
         for (int i = 0; i < n; ++i)
-            TDLS_DYN_PIV(i) = i;
+            TDLS_LUPP_DYN_PIV(i) = i;
 
         const int nt = num_tiles(n);
         for (int k = 0; k < nt; ++k) {
-            if constexpr (Sched == TiledLuSchedule::RightLooking) {
+            if constexpr (Sched == TiledLUppSchedule::RightLooking) {
                 if (!rl_step<oot_diag, fuse_rhs>(n, A, A_stride, piv, piv_stride, k, oot_count, y,
                                                  rhs_stride))
                     return false;
@@ -954,8 +955,8 @@ struct TiledLuSolverDynamic {
             for (int w = 0; w < W; ++w) {
                 T sum = T(0);
                 for (int j = 0; j < ke; ++j)
-                    sum += Lmk[i * TS + j] * TDLS_DYN_XW(w, k0 + j);
-                TDLS_DYN_XW(w, m0 + i) -= sum;
+                    sum += Lmk[i * TS + j] * TDLS_LUPP_DYN_XW(w, k0 + j);
+                TDLS_LUPP_DYN_XW(w, m0 + i) -= sum;
             }
         }
     }
@@ -988,7 +989,7 @@ struct TiledLuSolverDynamic {
         for (int kk = 0; kk < ke; ++kk) {
             for (int i = kk + 1; i < ke; ++i) {
                 for (int w = 0; w < W; ++w)
-                    TDLS_DYN_XW(w, k0 + i) -= Lkk[i * TS + kk] * TDLS_DYN_XW(w, k0 + kk);
+                    TDLS_LUPP_DYN_XW(w, k0 + i) -= Lkk[i * TS + kk] * TDLS_LUPP_DYN_XW(w, k0 + kk);
             }
         }
 
@@ -1025,8 +1026,8 @@ struct TiledLuSolverDynamic {
             for (int w = 0; w < W; ++w) {
                 T sum = T(0);
                 for (int j = 0; j < me; ++j)
-                    sum += Ukm[i * TS + j] * TDLS_DYN_XW(w, m0 + j);
-                TDLS_DYN_XW(w, k0 + i) -= sum;
+                    sum += Ukm[i * TS + j] * TDLS_LUPP_DYN_XW(w, m0 + j);
+                TDLS_LUPP_DYN_XW(w, k0 + i) -= sum;
             }
         }
     }
@@ -1063,10 +1064,10 @@ struct TiledLuSolverDynamic {
 
         for (int kk = ke - 1; kk >= 0; --kk) {
             for (int w = 0; w < W; ++w)
-                TDLS_DYN_XW(w, k0 + kk) *= Ukk[kk * TS + kk]; // diag holds 1/pivot
+                TDLS_LUPP_DYN_XW(w, k0 + kk) *= Ukk[kk * TS + kk]; // diag holds 1/pivot
             for (int i = 0; i < kk; ++i) {
                 for (int w = 0; w < W; ++w)
-                    TDLS_DYN_XW(w, k0 + i) -= Ukk[i * TS + kk] * TDLS_DYN_XW(w, k0 + kk);
+                    TDLS_LUPP_DYN_XW(w, k0 + i) -= Ukk[i * TS + kk] * TDLS_LUPP_DYN_XW(w, k0 + kk);
             }
         }
     }
@@ -1135,7 +1136,7 @@ struct TiledLuSolverDynamic {
                const int* TDLS_RESTRICT piv, const int piv_stride, const T* TDLS_RESTRICT b,
                T* TDLS_RESTRICT x, const int rhs_stride) {
         for (int i = 0; i < n; ++i)
-            TDLS_DYN_X(i) = TDLS_DYN_B(TDLS_DYN_PIV(i));
+            TDLS_LUPP_DYN_X(i) = TDLS_LUPP_DYN_B(TDLS_LUPP_DYN_PIV(i));
         fwd_bwd<1>(n, A, A_stride, piv, piv_stride, x, rhs_stride, 0);
     }
 
@@ -1179,9 +1180,9 @@ struct TiledLuSolverDynamic {
                                const int* TDLS_RESTRICT piv, const int piv_stride, const int col0,
                                T* TDLS_RESTRICT x, const int rhs_stride, const int xcol_stride) {
         for (int i = 0; i < n; ++i) {
-            const int p = TDLS_DYN_PIV(i);
+            const int p = TDLS_LUPP_DYN_PIV(i);
             for (int w = 0; w < W; ++w)
-                TDLS_DYN_XW(w, i) = (p == col0 + w) ? T(1) : T(0);
+                TDLS_LUPP_DYN_XW(w, i) = (p == col0 + w) ? T(1) : T(0);
         }
         fwd_bwd<W>(n, A, A_stride, piv, piv_stride, x, rhs_stride, xcol_stride);
     }
@@ -1212,16 +1213,16 @@ struct TiledLuSolverDynamic {
             unsigned long long visited = 0ull;
             for (int s = 0; s < n; ++s) {
                 if ((visited >> s) & 1ull) continue;
-                const T tmp = TDLS_DYN_X(s);
+                const T tmp = TDLS_LUPP_DYN_X(s);
                 int cur     = s;
-                int nxt     = TDLS_DYN_PIV(cur);
+                int nxt     = TDLS_LUPP_DYN_PIV(cur);
                 while (nxt != s) {
-                    TDLS_DYN_X(cur) = TDLS_DYN_X(nxt);
+                    TDLS_LUPP_DYN_X(cur) = TDLS_LUPP_DYN_X(nxt);
                     visited |= 1ull << cur;
                     cur = nxt;
-                    nxt = TDLS_DYN_PIV(cur);
+                    nxt = TDLS_LUPP_DYN_PIV(cur);
                 }
-                TDLS_DYN_X(cur) = tmp;
+                TDLS_LUPP_DYN_X(cur) = tmp;
                 visited |= 1ull << cur;
             }
         } else {
@@ -1229,20 +1230,20 @@ struct TiledLuSolverDynamic {
             // only when reached from its smallest index, detected by
             // walking the orbit. Values and order match the mask path.
             for (int s = 0; s < n; ++s) {
-                int probe = TDLS_DYN_PIV(s);
+                int probe = TDLS_LUPP_DYN_PIV(s);
                 while (probe > s)
-                    probe = TDLS_DYN_PIV(probe);
+                    probe = TDLS_LUPP_DYN_PIV(probe);
                 if (probe != s) continue;
 
-                const T tmp = TDLS_DYN_X(s);
+                const T tmp = TDLS_LUPP_DYN_X(s);
                 int cur     = s;
-                int nxt     = TDLS_DYN_PIV(cur);
+                int nxt     = TDLS_LUPP_DYN_PIV(cur);
                 while (nxt != s) {
-                    TDLS_DYN_X(cur) = TDLS_DYN_X(nxt);
-                    cur             = nxt;
-                    nxt             = TDLS_DYN_PIV(cur);
+                    TDLS_LUPP_DYN_X(cur) = TDLS_LUPP_DYN_X(nxt);
+                    cur                  = nxt;
+                    nxt                  = TDLS_LUPP_DYN_PIV(cur);
                 }
-                TDLS_DYN_X(cur) = tmp;
+                TDLS_LUPP_DYN_X(cur) = tmp;
             }
         }
         fwd_bwd<1>(n, A, A_stride, piv, piv_stride, x, rhs_stride, 0);
@@ -1352,12 +1353,12 @@ struct TiledLuSolverDynamic {
 
 
 
-#undef TDLS_DYN_A
-#undef TDLS_DYN_PIV
-#undef TDLS_DYN_X
-#undef TDLS_DYN_B
-#undef TDLS_DYN_XW
-#undef TDLS_DYN_Y
+#undef TDLS_LUPP_DYN_A
+#undef TDLS_LUPP_DYN_PIV
+#undef TDLS_LUPP_DYN_X
+#undef TDLS_LUPP_DYN_B
+#undef TDLS_LUPP_DYN_XW
+#undef TDLS_LUPP_DYN_Y
 
 
 
@@ -1369,4 +1370,4 @@ struct TiledLuSolverDynamic {
 
 
 
-#endif // TDLS_SOLVERS_TILED_LU_SOLVER_DYNAMIC_HPP
+#endif // TDLS_SOLVERS_TILED_LUPP_SOLVER_DYNAMIC_HPP

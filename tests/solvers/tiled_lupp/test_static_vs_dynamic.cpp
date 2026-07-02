@@ -1,10 +1,10 @@
 /// \file
-/// \brief Bridge suite: the dynamic solver reproduces the static solver
+/// \brief Bridge suite: the dynamic TiledLUpp solver reproduces the static TiledLUpp solver
 /// bitwise.
 /// \author Tristan Chenaille
 ///
 /// At equal shape (N, TS, schedule, configuration) and on identical
-/// inputs, TiledLuSolverDynamic and TiledLuSolverStatic execute the same
+/// inputs, TiledLUppSolverDynamic and TiledLUppSolverStatic execute the same
 /// arithmetic sequence: the factored matrix, the pivot, the solution and
 /// the out-of-tile counter must be bitwise identical. The bridge runs on
 /// the boundary-covering shape grid so that every structural code path
@@ -33,11 +33,11 @@ namespace {
 /// \param[in] count number of systems
 /// \param[in] bound half-width of the entry distribution
 /// \param[in] seed  generator seed
-template<typename T, int N, int TS, tdls::TiledLuSchedule Sched>
+template<typename T, int N, int TS, tdls::TiledLUppSchedule Sched>
 void bridge_case(const int count, const double bound, const std::uint64_t seed) {
-    using Config  = tdls::TiledLuConfig<T, TS, Sched>;
-    using Static  = tdls::TiledLuSolverStatic<T, N, Config>;
-    using Dynamic = tdls::TiledLuSolverDynamic<T, Config>;
+    using Config  = tdls::TiledLUppConfig<T, TS, Sched>;
+    using Static  = tdls::TiledLUppSolverStatic<T, N, Config>;
+    using Dynamic = tdls::TiledLUppSolverDynamic<T, Config>;
     auto batch    = tdls_tests::make_batch<T>(N, count, seed, bound);
     tdls_tests::zero_column(batch, 0, 0);
 
@@ -71,11 +71,11 @@ void bridge_case(const int count, const double bound, const std::uint64_t seed) 
 
 /// Emits the RL and LL bridge cases of one (type, N, TS, regime) cell.
 #define TDLS_BRIDGE_CASES(T, N, TS, REGIME, COUNT, BOUND, SEED)                                    \
-    TDLS_TEST_CASE("bridge/static-dynamic/" #T "/N=" #N ",TS=" #TS ",RL," REGIME) {                \
-        bridge_case<T, N, TS, tdls::TiledLuSchedule::RightLooking>(COUNT, BOUND, SEED);            \
+    TDLS_TEST_CASE("tiledlupp/bridge/static-dynamic/" #T "/N=" #N ",TS=" #TS ",RL," REGIME) {      \
+        bridge_case<T, N, TS, tdls::TiledLUppSchedule::RightLooking>(COUNT, BOUND, SEED);          \
     }                                                                                              \
-    TDLS_TEST_CASE("bridge/static-dynamic/" #T "/N=" #N ",TS=" #TS ",LL," REGIME) {                \
-        bridge_case<T, N, TS, tdls::TiledLuSchedule::LeftLooking>(COUNT, BOUND, SEED + 1);         \
+    TDLS_TEST_CASE("tiledlupp/bridge/static-dynamic/" #T "/N=" #N ",TS=" #TS ",LL," REGIME) {      \
+        bridge_case<T, N, TS, tdls::TiledLUppSchedule::LeftLooking>(COUNT, BOUND, SEED + 1);       \
     }
 
 // Default regime over the boundary-covering grid, double.

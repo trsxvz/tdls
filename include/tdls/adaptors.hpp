@@ -4,8 +4,8 @@
 
 
 /// \file
-/// \brief Generic adaptors: call the solvers directly on dense math
-/// objects (matrices, vectors, views) instead of raw pointers.
+/// \brief Generic adaptors: call the TiledLUpp solvers directly on dense
+/// math objects (matrices, vectors, views) instead of raw pointers.
 /// \author Tristan Chenaille
 ///
 /// The adaptors accept any object matching a small STRUCTURAL contract -
@@ -28,12 +28,15 @@
 ///
 /// Two families are rejected at compile time with an explicit message:
 /// row-strided matrix views (sub-matrix views, whose stride between rows
-/// is unrelated to the column count) cannot be expressed by the solvers'
+/// is unrelated to the column count) cannot be expressed by the TiledLUpp solvers'
 /// single-stride addressing, and gather views holding one pointer per
 /// element expose no data() at all.
 ///
 /// The detection can be overridden for exotic types by specializing
 /// tdls::storage_traits.
+///
+/// The entry points currently dispatch to the TiledLUpp solver family;
+/// a family selection parameter can join when another family lands.
 
 
 
@@ -41,7 +44,7 @@
 #include <type_traits>
 
 #include <tdls/core/macros.hpp>
-#include <tdls/solvers/tiled_lu/solver_static.hpp>
+#include <tdls/solvers/tiled_lupp/solver_static.hpp>
 
 
 
@@ -178,7 +181,7 @@ struct storage_traits<DenseType, std::enable_if_t<detail::is_dense_v<DenseType>>
     // (coalesced) view instead.
     static_assert(has_uniform_rows(),
                   "tdls adaptors: row-strided matrix views (sub-matrix views) cannot "
-                  "be expressed by the single-stride addressing of the solvers");
+                  "be expressed by the single-stride addressing of the TiledLUpp solvers");
 
     //! \brief true when the object carries a runtime element stride
     static constexpr bool has_runtime_stride = detail::has_pair_data<DenseType>::value ||
@@ -220,9 +223,9 @@ struct storage_traits<DenseType, std::enable_if_t<detail::is_dense_v<DenseType>>
 namespace detail {
 
 /// \brief Common compile-time context of the adaptor entry points:
-/// resolves the scalar type, the dimension and the solver from the
+/// resolves the scalar type, the dimension and the TiledLUpp solver from the
 /// matrix argument.
-/// \tparam UserConfig user configuration (void = TiledLuDefaultConfig)
+/// \tparam UserConfig user configuration (void = TiledLUppDefaultConfig)
 /// \tparam MatrixType dense matrix type
 template<typename UserConfig, typename MatrixType>
 struct adaptor_context {
@@ -238,9 +241,9 @@ struct adaptor_context {
     static constexpr int N = mtraits::extent0;
     //! \brief resolved configuration
     using config =
-        std::conditional_t<std::is_void_v<UserConfig>, TiledLuDefaultConfig<scalar>, UserConfig>;
+        std::conditional_t<std::is_void_v<UserConfig>, TiledLUppDefaultConfig<scalar>, UserConfig>;
     //! \brief resolved solver
-    using solver = TiledLuSolverStatic<scalar, N, config>;
+    using solver = TiledLUppSolverStatic<scalar, N, config>;
 };
 
 /// \brief Checks that a vector-like argument matches the system: arity 1,
@@ -327,7 +330,7 @@ struct pivot_access {
 
 
 /// \brief Factor a dense matrix object in place, A := P*L*U.
-/// \tparam UserConfig compile-time knobs (void = TiledLuDefaultConfig)
+/// \tparam UserConfig compile-time knobs (void = TiledLUppDefaultConfig)
 /// \param[in,out] A   matrix-like object (factored in place)
 /// \param[in,out] piv pivot storage: int pointer/array or dense int object
 /// \return false on a singular matrix.
@@ -342,7 +345,7 @@ TDLS_HOST_DEVICE TDLS_FORCEINLINE bool factorize(MatrixType& A, PivotType& piv) 
 }
 
 /// \brief Solve A x = b on dense objects: factorize + substitute.
-/// \tparam UserConfig compile-time knobs (void = TiledLuDefaultConfig)
+/// \tparam UserConfig compile-time knobs (void = TiledLUppDefaultConfig)
 /// \param[in,out] A   matrix-like object (factored in place)
 /// \param[in,out] piv pivot storage: int pointer/array or dense int object
 /// \param[in]     b   vector-like right-hand side, in original order
@@ -369,7 +372,7 @@ TDLS_HOST_DEVICE TDLS_FORCEINLINE bool solve(MatrixType& A, PivotType& piv, cons
 
 /// \brief Solve A y = y on dense objects with the fused factorization
 /// (forward substitution folded into factorize, backward pass after).
-/// \tparam UserConfig compile-time knobs (void = TiledLuDefaultConfig)
+/// \tparam UserConfig compile-time knobs (void = TiledLUppDefaultConfig)
 /// \param[in,out] A   matrix-like object (factored in place)
 /// \param[in,out] piv pivot storage: int pointer/array or dense int object
 /// \param[in,out] y   vector-like right-hand side on entry, solution on exit
@@ -390,7 +393,7 @@ TDLS_HOST_DEVICE TDLS_FORCEINLINE bool solve_fused(MatrixType& A, PivotType& piv
 
 /// \brief Solve x := U^-1 L^-1 P b on dense objects, from a prior
 /// factorize. b and x must not alias.
-/// \tparam UserConfig compile-time knobs (void = TiledLuDefaultConfig)
+/// \tparam UserConfig compile-time knobs (void = TiledLUppDefaultConfig)
 /// \param[in]  A   factored matrix-like object
 /// \param[in]  piv pivot storage produced by factorize
 /// \param[in]  b   vector-like right-hand side, in original order
@@ -415,7 +418,7 @@ TDLS_HOST_DEVICE TDLS_FORCEINLINE void substitute(const MatrixType& A, const Piv
 
 /// \brief Solve in place on dense objects: x holds the unpermuted
 /// right-hand side on entry and the solution on exit.
-/// \tparam UserConfig compile-time knobs (void = TiledLuDefaultConfig)
+/// \tparam UserConfig compile-time knobs (void = TiledLUppDefaultConfig)
 /// \param[in]     A   factored matrix-like object
 /// \param[in]     piv pivot storage produced by factorize
 /// \param[in,out] x   vector-like right-hand side, then solution
@@ -435,7 +438,7 @@ TDLS_HOST_DEVICE TDLS_FORCEINLINE void substitute_inplace(const MatrixType& A, c
 
 /// \brief Solve A x = e_col on dense objects, from a prior factorize -
 /// the consistent-tangent-operator path.
-/// \tparam UserConfig compile-time knobs (void = TiledLuDefaultConfig)
+/// \tparam UserConfig compile-time knobs (void = TiledLUppDefaultConfig)
 /// \param[in]  A   factored matrix-like object
 /// \param[in]  piv pivot storage produced by factorize
 /// \param[in]  col index of the canonical column e_col

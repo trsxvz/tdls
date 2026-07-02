@@ -1,8 +1,8 @@
 /// \file
-/// \brief Anchor suite of the static solver.
+/// \brief Anchor suite of the static TiledLUpp solver.
 /// \author Tristan Chenaille
 ///
-/// TiledLuSolverStatic is compared against the independent reference LU
+/// TiledLUppSolverStatic is compared against the independent reference LU
 /// (tests/common/reference_lu.hpp) on a grid of shapes covering the
 /// structural boundaries of the algorithm: minimal N, trailing tiles,
 /// the 32/33 mask boundary of substitute_inplace, TS = N, and large N
@@ -37,10 +37,10 @@ namespace {
 /// \param[in] bound     half-width of the entry distribution
 /// \param[in] tolerance backward-error bound
 /// \param[in] seed      generator seed
-template<typename T, int N, int TS, tdls::TiledLuSchedule Sched>
+template<typename T, int N, int TS, tdls::TiledLUppSchedule Sched>
 void anchor_case(const int count, const double bound, const double tolerance,
                  const std::uint64_t seed) {
-    using Solver = tdls::TiledLuSolverStatic<T, N, tdls::TiledLuConfig<T, TS, Sched>>;
+    using Solver = tdls::TiledLUppSolverStatic<T, N, tdls::TiledLUppConfig<T, TS, Sched>>;
     auto batch   = tdls_tests::make_batch<T>(N, count, seed, bound);
     tdls_tests::zero_column(batch, 0, 0);
 
@@ -81,11 +81,11 @@ void anchor_case(const int count, const double bound, const double tolerance,
 
 /// Emits the RL and LL anchor cases of one (type, N, TS, regime) cell.
 #define TDLS_ANCHOR_CASES(T, N, TS, REGIME, COUNT, BOUND, TOL, SEED)                               \
-    TDLS_TEST_CASE("oracle/static/" #T "/N=" #N ",TS=" #TS ",RL," REGIME) {                        \
-        anchor_case<T, N, TS, tdls::TiledLuSchedule::RightLooking>(COUNT, BOUND, TOL, SEED);       \
+    TDLS_TEST_CASE("tiledlupp/oracle/static/" #T "/N=" #N ",TS=" #TS ",RL," REGIME) {              \
+        anchor_case<T, N, TS, tdls::TiledLUppSchedule::RightLooking>(COUNT, BOUND, TOL, SEED);     \
     }                                                                                              \
-    TDLS_TEST_CASE("oracle/static/" #T "/N=" #N ",TS=" #TS ",LL," REGIME) {                        \
-        anchor_case<T, N, TS, tdls::TiledLuSchedule::LeftLooking>(COUNT, BOUND, TOL, SEED + 1);    \
+    TDLS_TEST_CASE("tiledlupp/oracle/static/" #T "/N=" #N ",TS=" #TS ",LL," REGIME) {              \
+        anchor_case<T, N, TS, tdls::TiledLUppSchedule::LeftLooking>(COUNT, BOUND, TOL, SEED + 1);  \
     }
 
 // Default regime, double: the whole shape grid.

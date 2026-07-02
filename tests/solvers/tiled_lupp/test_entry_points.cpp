@@ -2,7 +2,7 @@
 /// \brief Bridge suite: the entry points are mutually consistent.
 /// \author Tristan Chenaille
 ///
-/// The equivalences documented by the solver are checked bitwise on
+/// The equivalences documented by the TiledLUpp solvers are checked bitwise on
 /// identical inputs: solve() against factorize() + substitute(),
 /// solve_fused() against factorize() + substitute_inplace(),
 /// substitute_canonical() against substitute_canonical_block<1>(), a
@@ -30,9 +30,9 @@ namespace {
 /// \param[in] count number of systems
 /// \param[in] bound half-width of the entry distribution
 /// \param[in] seed  generator seed
-template<typename T, int N, int TS, tdls::TiledLuSchedule Sched>
+template<typename T, int N, int TS, tdls::TiledLUppSchedule Sched>
 void entry_points_case(const int count, const double bound, const std::uint64_t seed) {
-    using Solver     = tdls::TiledLuSolverStatic<T, N, tdls::TiledLuConfig<T, TS, Sched>>;
+    using Solver     = tdls::TiledLUppSolverStatic<T, N, tdls::TiledLUppConfig<T, TS, Sched>>;
     const auto batch = tdls_tests::make_batch<T>(N, count, seed, bound);
 
     std::vector<T> A_split(N * N), A_other(N * N);
@@ -142,20 +142,20 @@ void entry_points_case(const int count, const double bound, const std::uint64_t 
 
 } // namespace
 
-TDLS_TEST_CASE("bridge/entry-points/double/N=12,TS=3,RL,default") {
-    entry_points_case<double, 12, 3, tdls::TiledLuSchedule::RightLooking>(200, 0.5, 150100);
+TDLS_TEST_CASE("tiledlupp/bridge/entry-points/double/N=12,TS=3,RL,default") {
+    entry_points_case<double, 12, 3, tdls::TiledLUppSchedule::RightLooking>(200, 0.5, 150100);
 }
-TDLS_TEST_CASE("bridge/entry-points/double/N=12,TS=3,RL,stress") {
-    entry_points_case<double, 12, 3, tdls::TiledLuSchedule::RightLooking>(200, 5e-10, 150200);
+TDLS_TEST_CASE("tiledlupp/bridge/entry-points/double/N=12,TS=3,RL,stress") {
+    entry_points_case<double, 12, 3, tdls::TiledLUppSchedule::RightLooking>(200, 5e-10, 150200);
 }
-TDLS_TEST_CASE("bridge/entry-points/double/N=13,TS=6,LL,default") {
-    entry_points_case<double, 13, 6, tdls::TiledLuSchedule::LeftLooking>(200, 0.5, 150300);
+TDLS_TEST_CASE("tiledlupp/bridge/entry-points/double/N=13,TS=6,LL,default") {
+    entry_points_case<double, 13, 6, tdls::TiledLUppSchedule::LeftLooking>(200, 0.5, 150300);
 }
-TDLS_TEST_CASE("bridge/entry-points/double/N=13,TS=6,LL,stress") {
-    entry_points_case<double, 13, 6, tdls::TiledLuSchedule::LeftLooking>(200, 5e-10, 150400);
+TDLS_TEST_CASE("tiledlupp/bridge/entry-points/double/N=13,TS=6,LL,stress") {
+    entry_points_case<double, 13, 6, tdls::TiledLUppSchedule::LeftLooking>(200, 5e-10, 150400);
 }
-TDLS_TEST_CASE("bridge/entry-points/float/N=12,TS=3,RL,default") {
-    entry_points_case<float, 12, 3, tdls::TiledLuSchedule::RightLooking>(200, 0.5, 150500);
+TDLS_TEST_CASE("tiledlupp/bridge/entry-points/float/N=12,TS=3,RL,default") {
+    entry_points_case<float, 12, 3, tdls::TiledLUppSchedule::RightLooking>(200, 0.5, 150500);
 }
 
 TDLS_TEST_MAIN

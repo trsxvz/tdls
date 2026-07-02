@@ -1,8 +1,8 @@
 /// \file
-/// \brief Anchor suite of the dynamic solver.
+/// \brief Anchor suite of the dynamic TiledLUpp solver.
 /// \author Tristan Chenaille
 ///
-/// TiledLuSolverDynamic is compared against the independent reference LU
+/// TiledLUppSolverDynamic is compared against the independent reference LU
 /// on the same shape grid as the static anchor, plus the shapes only the
 /// dynamic solver accepts: tile size exceeding the dimension (single
 /// partial tile) and dimensions beyond the static test grid. The verdict
@@ -23,7 +23,7 @@
 namespace {
 
 /// \brief Runs one anchor comparison on a reproducible batch: solves with
-/// the dynamic solver (contiguous storage, runtime dimension) and with
+/// the dynamic TiledLUpp solver (contiguous storage, runtime dimension) and with
 /// the reference, requires identical verdicts, exactly one singular
 /// report on each side, and both backward errors under the tolerance.
 /// \tparam T     scalar type
@@ -34,10 +34,10 @@ namespace {
 /// \param[in] bound     half-width of the entry distribution
 /// \param[in] tolerance backward-error bound
 /// \param[in] seed      generator seed
-template<typename T, int TS, tdls::TiledLuSchedule Sched>
+template<typename T, int TS, tdls::TiledLUppSchedule Sched>
 void anchor_case(const int n, const int count, const double bound, const double tolerance,
                  const std::uint64_t seed) {
-    using Solver = tdls::TiledLuSolverDynamic<T, tdls::TiledLuConfig<T, TS, Sched>>;
+    using Solver = tdls::TiledLUppSolverDynamic<T, tdls::TiledLUppConfig<T, TS, Sched>>;
     auto batch   = tdls_tests::make_batch<T>(n, count, seed, bound);
     tdls_tests::zero_column(batch, 0, 0);
 
@@ -79,11 +79,11 @@ void anchor_case(const int n, const int count, const double bound, const double 
 
 /// Emits the RL and LL anchor cases of one (type, n, TS, regime) cell.
 #define TDLS_ANCHOR_CASES(T, N, TS, REGIME, COUNT, BOUND, TOL, SEED)                               \
-    TDLS_TEST_CASE("oracle/dynamic/" #T "/n=" #N ",TS=" #TS ",RL," REGIME) {                       \
-        anchor_case<T, TS, tdls::TiledLuSchedule::RightLooking>(N, COUNT, BOUND, TOL, SEED);       \
+    TDLS_TEST_CASE("tiledlupp/oracle/dynamic/" #T "/n=" #N ",TS=" #TS ",RL," REGIME) {             \
+        anchor_case<T, TS, tdls::TiledLUppSchedule::RightLooking>(N, COUNT, BOUND, TOL, SEED);     \
     }                                                                                              \
-    TDLS_TEST_CASE("oracle/dynamic/" #T "/n=" #N ",TS=" #TS ",LL," REGIME) {                       \
-        anchor_case<T, TS, tdls::TiledLuSchedule::LeftLooking>(N, COUNT, BOUND, TOL, SEED + 1);    \
+    TDLS_TEST_CASE("tiledlupp/oracle/dynamic/" #T "/n=" #N ",TS=" #TS ",LL," REGIME) {             \
+        anchor_case<T, TS, tdls::TiledLUppSchedule::LeftLooking>(N, COUNT, BOUND, TOL, SEED + 1);  \
     }
 
 // Default regime, double: the static grid plus the dynamic-only shapes.

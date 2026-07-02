@@ -1,14 +1,14 @@
-#ifndef TDLS_SOLVERS_TILED_LU_CONFIG_HPP
-#define TDLS_SOLVERS_TILED_LU_CONFIG_HPP
+#ifndef TDLS_SOLVERS_TILED_LUPP_CONFIG_HPP
+#define TDLS_SOLVERS_TILED_LUPP_CONFIG_HPP
 
 
 
 /// \file
-/// \brief Compile-time configuration of the tiled LU solver family.
+/// \brief Compile-time configuration of the TiledLUpp solver family.
 /// \author Tristan Chenaille
 ///
 /// Every knob is a `static constexpr` member of a config type passed as the
-/// `TiledSolverConfig` template argument of the solvers. TiledLuDefaultConfig holds the
+/// `TiledLUppSolverConfig` template argument of the TiledLUpp solvers. TiledLUppDefaultConfig holds the
 /// tuned defaults; a caller overrides them by providing its own type with
 /// the same members.
 
@@ -26,29 +26,29 @@ namespace tdls {
 
 
 /// \brief Elimination schedule of the tiled factorization.
-enum class TiledLuSchedule {
+enum class TiledLUppSchedule {
     RightLooking, ///< Factor the diagonal tile, push updates into the trailing matrix.
     LeftLooking   ///< Pull updates from prior tiles when a tile is visited.
 };
 
 
 
-/// \brief Default compile-time knobs of the tiled LU solvers.
+/// \brief Default compile-time knobs of the TiledLUpp solvers.
 /// \tparam T scalar type (float or double)
 template<typename T>
-struct TiledLuDefaultConfig {
+struct TiledLUppDefaultConfig {
 
     /// Tile extent: the matrix is processed as a grid of tile_size x
     /// tile_size register tiles. This is the main performance axis of the
     /// solvers - tune it per system dimension (measured optima in the
-    /// source project: 3, 4 or 6 depending on N). The static solver
-    /// requires 2 <= tile_size <= N; the dynamic solver only requires
+    /// source project: 3, 4 or 6 depending on N). The static TiledLUpp solver
+    /// requires 2 <= tile_size <= N; the dynamic TiledLUpp solver only requires
     /// tile_size >= 2 (it may exceed n).
     static constexpr int tile_size = 3;
 
     /// Elimination schedule of the tiled factorization, see
-    /// TiledLuSchedule.
-    static constexpr TiledLuSchedule schedule = TiledLuSchedule::RightLooking;
+    /// TiledLUppSchedule.
+    static constexpr TiledLUppSchedule schedule = TiledLUppSchedule::RightLooking;
 
     /// Acceptable-pivot threshold of the out-of-tile search. An in-tile
     /// pivot candidate whose magnitude reaches this value is accepted
@@ -97,10 +97,10 @@ struct TiledLuDefaultConfig {
 /// \tparam T     scalar type (float or double)
 /// \tparam TS    tile extent
 /// \tparam Sched elimination schedule
-template<typename T, int TS, TiledLuSchedule Sched = TiledLuSchedule::RightLooking>
-struct TiledLuConfig : TiledLuDefaultConfig<T> {
-    static constexpr int tile_size            = TS;
-    static constexpr TiledLuSchedule schedule = Sched;
+template<typename T, int TS, TiledLUppSchedule Sched = TiledLUppSchedule::RightLooking>
+struct TiledLUppConfig : TiledLUppDefaultConfig<T> {
+    static constexpr int tile_size              = TS;
+    static constexpr TiledLUppSchedule schedule = Sched;
 };
 
 
@@ -109,4 +109,4 @@ struct TiledLuConfig : TiledLuDefaultConfig<T> {
 
 
 
-#endif // TDLS_SOLVERS_TILED_LU_CONFIG_HPP
+#endif // TDLS_SOLVERS_TILED_LUPP_CONFIG_HPP

@@ -5,7 +5,7 @@
 /// Different tile sizes execute different arithmetic sequences, so tile
 /// sizes cannot be compared bitwise to each other. Each tile size is
 /// therefore anchored on the backward error against the reference LU,
-/// and bridged bitwise against the dynamic solver at equal shape. The
+/// and bridged bitwise against the dynamic TiledLUpp solver at equal shape. The
 /// sweeps include divisible grids, trailing tiles and the TS = N corner;
 /// the dynamic-only TS > n corner is anchored by the dynamic oracle
 /// suite.
@@ -23,7 +23,7 @@
 namespace {
 
 /// \brief Anchors one (N, TS) cell on the backward error and bridges it
-/// bitwise against the dynamic solver.
+/// bitwise against the dynamic TiledLUpp solver.
 /// \tparam T  scalar type
 /// \tparam N  system dimension
 /// \tparam TS tile size
@@ -34,9 +34,9 @@ namespace {
 template<typename T, int N, int TS>
 void tile_size_case(const int count, const double bound, const double tolerance,
                     const std::uint64_t seed) {
-    using Config     = tdls::TiledLuConfig<T, TS>;
-    using Static     = tdls::TiledLuSolverStatic<T, N, Config>;
-    using Dynamic    = tdls::TiledLuSolverDynamic<T, Config>;
+    using Config     = tdls::TiledLUppConfig<T, TS>;
+    using Static     = tdls::TiledLUppSolverStatic<T, N, Config>;
+    using Dynamic    = tdls::TiledLUppSolverDynamic<T, Config>;
     const auto batch = tdls_tests::make_batch<T>(N, count, seed, bound);
 
     double be_max = 0.0;
@@ -66,7 +66,7 @@ void tile_size_case(const int count, const double bound, const double tolerance,
 
 /// Emits the tile-size case of one (N, TS) cell.
 #define TDLS_TILE_SIZE_CASE(N, TS, COUNT, SEED)                                                    \
-    TDLS_TEST_CASE("tile-sizes/double/N=" #N ",TS=" #TS ",default") {                              \
+    TDLS_TEST_CASE("tiledlupp/tile-sizes/double/N=" #N ",TS=" #TS ",default") {                    \
         tile_size_case<double, N, TS>(COUNT, 0.5, 1e-9, SEED);                                     \
     }
 

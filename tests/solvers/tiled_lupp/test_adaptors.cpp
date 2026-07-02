@@ -123,11 +123,11 @@ static_assert(tdls::storage_traits<MockVector>::is_internal);
 static_assert(!tdls::storage_traits<MockPairMatrixView>::is_internal);
 static_assert(!tdls::storage_traits<MockGetStrideVectorView>::is_internal);
 
-using RawSolver = tdls::TiledLuSolverStatic<double, N, tdls::TiledLuConfig<double, 3>>;
+using RawSolver = tdls::TiledLUppSolverStatic<double, N, tdls::TiledLUppConfig<double, 3>>;
 
 } // namespace
 
-TDLS_TEST_CASE("adaptors/contiguous-mocks-reproduce-raw-internal") {
+TDLS_TEST_CASE("tiledlupp/adaptors/contiguous-mocks-reproduce-raw-internal") {
     tdls_tests::UniformGenerator gen(210100, 0.5);
     for (int repeat = 0; repeat < 100; ++repeat) {
         MockMatrix A;
@@ -148,7 +148,7 @@ TDLS_TEST_CASE("adaptors/contiguous-mocks-reproduce-raw-internal") {
     }
 }
 
-TDLS_TEST_CASE("adaptors/strided-mocks-reproduce-raw-external") {
+TDLS_TEST_CASE("tiledlupp/adaptors/strided-mocks-reproduce-raw-external") {
     // Matrix through the pair shape, vectors through the getStride shape,
     // all mapped on one SoA batch.
     constexpr int count = 64;
@@ -179,7 +179,7 @@ TDLS_TEST_CASE("adaptors/strided-mocks-reproduce-raw-external") {
     TDLS_CHECK_BITWISE(gx.data(), gx_raw.data(), gx.size());
 }
 
-TDLS_TEST_CASE("adaptors/dense-int-pivot") {
+TDLS_TEST_CASE("tiledlupp/adaptors/dense-int-pivot") {
     tdls_tests::UniformGenerator gen(210300, 0.5);
     MockMatrix A;
     double A_raw[N * N];
@@ -194,7 +194,7 @@ TDLS_TEST_CASE("adaptors/dense-int-pivot") {
     TDLS_CHECK_BITWISE(piv.v, piv_raw, static_cast<std::size_t>(N));
 }
 
-TDLS_TEST_CASE("adaptors/substitution-entry-points-reproduce-raw") {
+TDLS_TEST_CASE("tiledlupp/adaptors/substitution-entry-points-reproduce-raw") {
     tdls_tests::UniformGenerator gen(210400, 0.5);
     MockMatrix A;
     MockVector b, x;
