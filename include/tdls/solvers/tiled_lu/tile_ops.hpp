@@ -74,7 +74,7 @@ struct TiledLuTileOps {
     /// Scales the sub-column by 1/pivot and updates the trailing block.
     /// Extents <R, C> bound the active part of the tile.
     /// The RECIPROCAL of the pivot is stored at the diagonal slot: every
-    /// downstream consumer (trsm_right, backward substitution, out-of-block
+    /// downstream consumer (trsm_right, backward substitution, out-of-tile
     /// replays) multiplies instead of dividing - the division is paid once
     /// here, where it already had to happen.
     /// \tparam R active row extent of the tile

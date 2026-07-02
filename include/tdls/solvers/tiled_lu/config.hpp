@@ -8,7 +8,7 @@
 /// \author Tristan Chenaille
 ///
 /// Every knob is a `static constexpr` member of a config type passed as the
-/// `Cfg` template argument of the solvers. TiledLuDefaultConfig holds the
+/// `TiledSolverConfig` template argument of the solvers. TiledLuDefaultConfig holds the
 /// tuned defaults; a caller overrides them by providing its own type with
 /// the same members.
 
@@ -38,12 +38,24 @@ enum class TiledLuSchedule {
 template<typename T>
 struct TiledLuDefaultConfig {
 
-    /// Acceptable-pivot threshold of the out-of-block search. An in-tile
+    /// Tile extent: the matrix is processed as a grid of tile_size x
+    /// tile_size register tiles. This is the main performance axis of the
+    /// solvers - tune it per system dimension (measured optima in the
+    /// source project: 3, 4 or 6 depending on N). The static solver
+    /// requires 2 <= tile_size <= N; the dynamic solver only requires
+    /// tile_size >= 2 (it may exceed n).
+    static constexpr int tile_size = 3;
+
+    /// Elimination schedule of the tiled factorization, see
+    /// TiledLuSchedule.
+    static constexpr TiledLuSchedule schedule = TiledLuSchedule::RightLooking;
+
+    /// Acceptable-pivot threshold of the out-of-tile search. An in-tile
     /// pivot candidate whose magnitude reaches this value is accepted
     /// without looking outside the tile; below it, the search extends to
-    /// the rows under the tile (out-of-block pivoting) and the best
+    /// the rows under the tile (out-of-tile pivoting) and the best
     /// corrected candidate wins.
-    static constexpr T oob_threshold = std::is_same_v<T, float> ? T(1e-4f) : T(1e-10);
+    static constexpr T oot_threshold = std::is_same_v<T, float> ? T(1e-4f) : T(1e-10);
 
     /// Singularity floor: the factorization is declared singular when even
     /// the best candidate stays below it. `numeric_limits<T>::min()`
@@ -54,15 +66,15 @@ struct TiledLuDefaultConfig {
     /// well-conditioned matrices at small scale.
     static constexpr T singular_eps = std::numeric_limits<T>::min();
 
-    /// Out-of-block pivot search strategy. When true, the below-tile scan
+    /// Out-of-tile pivot search strategy. When true, the below-tile scan
     /// stops at the first candidate whose corrected magnitude reaches
-    /// oob_threshold instead of scanning the whole panel for the maximum;
+    /// oot_threshold instead of scanning the whole panel for the maximum;
     /// the running maximum is still kept as the fallback when no candidate
-    /// is acceptable. Cheaper in the OOB-heavy regime - especially
+    /// is acceptable. Cheaper in the OOT-heavy regime - especially
     /// left-looking, where every candidate replays the prior tiles - at
-    /// the cost of a possibly smaller (but still >= oob_threshold) pivot.
+    /// the cost of a possibly smaller (but still >= oot_threshold) pivot.
     /// Set false to restore the full-panel partial-pivoting scan.
-    static constexpr bool oob_first_acceptable = true;
+    static constexpr bool oot_first_acceptable = true;
 
     /// Unroll policy of the in-tile scalar loops, applied through a
     /// two-branch `if constexpr` (the pragma dialect itself lives in
@@ -73,6 +85,19 @@ struct TiledLuDefaultConfig {
     /// faster compiles, GPU performance not guaranteed. Outer tile-sweep
     /// loops never carry a pragma in either branch.
     static constexpr bool unroll_inner = true;
+};
+
+
+
+/// \brief Convenience configuration selecting the tile size and the
+/// schedule while keeping every other knob at its default.
+/// \tparam T     scalar type (float or double)
+/// \tparam TS    tile extent
+/// \tparam Sched elimination schedule
+template<typename T, int TS, TiledLuSchedule Sched = TiledLuSchedule::RightLooking>
+struct TiledLuConfig : TiledLuDefaultConfig<T> {
+    static constexpr int tile_size            = TS;
+    static constexpr TiledLuSchedule schedule = Sched;
 };
 
 

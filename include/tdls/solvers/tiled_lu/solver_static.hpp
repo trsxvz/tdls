@@ -14,8 +14,8 @@
 /// (shared, global, or plain host memory). Pivoting is logical: piv[] maps
 /// logical row -> physical row, rows are physically swapped only inside the
 /// register-resident diagonal tile. When the best in-tile pivot falls
-/// below Cfg::oob_threshold, the search extends below the tile
-/// (out-of-block pivoting) and candidate values are corrected on the fly
+/// below TiledSolverConfig::oot_threshold, the search extends below the tile
+/// (out-of-tile pivoting) and candidate values are corrected on the fly
 /// for the eliminations they have not received yet.
 ///
 /// **Addressing convention (backend-agnostic, no accessor objects).**
@@ -78,7 +78,7 @@ namespace tdls {
 
 
 /// \brief Tiled dense LU factorization with logical partial pivoting and
-/// out-of-block pivot recovery, solving one NxN system per call.
+/// out-of-tile pivot recovery, solving one NxN system per call.
 ///
 /// All entry points are static, host- and device-callable, and take raw
 /// pointers pre-offset by the caller plus one runtime stride per array
@@ -95,14 +95,22 @@ namespace tdls {
 /// across several right-hand sides. Substitution is schedule-independent:
 /// RL and LL produce the same L\\U layout.
 ///
-/// \tparam T     scalar type (float or double)
-/// \tparam N     system dimension (N >= 2)
-/// \tparam TS    tile extent (2 <= TS <= N)
-/// \tparam Sched elimination schedule (right- or left-looking)
-/// \tparam Cfg   compile-time knobs, see TiledLuDefaultConfig
-template<typename T, int N, int TS, TiledLuSchedule Sched = TiledLuSchedule::RightLooking,
-         typename Cfg = TiledLuDefaultConfig<T>>
+/// The residency template booleans (internal_rhs / internal_piv /
+/// internal_matrix) deliberately have no default: they describe what the
+/// passed buffers ARE, so each call site must state them explicitly - a
+/// silent default could mismatch the actual argument and corrupt results
+/// without any diagnostic.
+///
+/// \tparam T                 scalar type (float or double)
+/// \tparam N                 system dimension (N >= 2)
+/// \tparam TiledSolverConfig compile-time knobs - tile size, schedule,
+///         pivoting thresholds, unroll policy; see TiledLuDefaultConfig
+///         and TiledLuConfig
+template<typename T, int N, typename TiledSolverConfig = TiledLuDefaultConfig<T>>
 struct TiledLuSolverStatic {
+
+    static constexpr int TS                = TiledSolverConfig::tile_size;
+    static constexpr TiledLuSchedule Sched = TiledSolverConfig::schedule;
 
     static_assert(N >= 2, "TiledLuSolverStatic: N must be >= 2");
     static_assert(TS >= 2 && TS <= N, "TiledLuSolverStatic: tile size must satisfy 2 <= TS <= N");
@@ -110,7 +118,7 @@ struct TiledLuSolverStatic {
     static constexpr int F    = N / TS;     // full tiles per dimension
     static constexpr int TAIL = N - F * TS; // trailing tile extent (0 = divisible)
 
-    using Ops = TiledLuTileOps<T, TS, Cfg::unroll_inner>;
+    using Ops = TiledLuTileOps<T, TS, TiledSolverConfig::unroll_inner>;
 
     /* =====================================================================
        Remote <-> register tile movement.
@@ -133,7 +141,7 @@ struct TiledLuSolverStatic {
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static void
     load_tile(const T* TDLS_RESTRICT A, const int A_stride, const int* TDLS_RESTRICT prow,
               const int col0, T* TDLS_RESTRICT t) {
-        if constexpr (Cfg::unroll_inner) {
+        if constexpr (TiledSolverConfig::unroll_inner) {
             TDLS_UNROLL_FORCE
             for (int i = 0; i < R; ++i) {
                 TDLS_UNROLL_FORCE
@@ -161,7 +169,7 @@ struct TiledLuSolverStatic {
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static void
     store_tile(T* TDLS_RESTRICT A, const int A_stride, const int* TDLS_RESTRICT prow,
                const int col0, const T* TDLS_RESTRICT t) {
-        if constexpr (Cfg::unroll_inner) {
+        if constexpr (TiledSolverConfig::unroll_inner) {
             TDLS_UNROLL_FORCE
             for (int i = 0; i < R; ++i) {
                 TDLS_UNROLL_FORCE
@@ -193,7 +201,7 @@ struct TiledLuSolverStatic {
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static void
     load_tile_piv(const T* TDLS_RESTRICT A, const int A_stride, const int* TDLS_RESTRICT piv,
                   const int piv_stride, const int row0, const int col0, T* TDLS_RESTRICT t) {
-        if constexpr (Cfg::unroll_inner) {
+        if constexpr (TiledSolverConfig::unroll_inner) {
             TDLS_UNROLL_FORCE
             for (int i = 0; i < R; ++i) {
                 const int phys = TDLS_PIV(row0 + i);
@@ -227,7 +235,7 @@ struct TiledLuSolverStatic {
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static void
     store_tile_piv(T* TDLS_RESTRICT A, const int A_stride, const int* TDLS_RESTRICT piv,
                    const int piv_stride, const int row0, const int col0, const T* TDLS_RESTRICT t) {
-        if constexpr (Cfg::unroll_inner) {
+        if constexpr (TiledSolverConfig::unroll_inner) {
             TDLS_UNROLL_FORCE
             for (int i = 0; i < R; ++i) {
                 const int phys = TDLS_PIV(row0 + i);
@@ -263,7 +271,7 @@ struct TiledLuSolverStatic {
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static void
     load_tile_piv_lower(const T* TDLS_RESTRICT A, const int A_stride, const int* TDLS_RESTRICT piv,
                         const int piv_stride, const int row0, const int col0, T* TDLS_RESTRICT t) {
-        if constexpr (Cfg::unroll_inner) {
+        if constexpr (TiledSolverConfig::unroll_inner) {
             TDLS_UNROLL_FORCE
             for (int i = 1; i < R; ++i) {
                 const int phys = TDLS_PIV(row0 + i);
@@ -296,7 +304,7 @@ struct TiledLuSolverStatic {
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static void
     load_tile_piv_upper(const T* TDLS_RESTRICT A, const int A_stride, const int* TDLS_RESTRICT piv,
                         const int piv_stride, const int row0, const int col0, T* TDLS_RESTRICT t) {
-        if constexpr (Cfg::unroll_inner) {
+        if constexpr (TiledSolverConfig::unroll_inner) {
             TDLS_UNROLL_FORCE
             for (int i = 0; i < R; ++i) {
                 const int phys = TDLS_PIV(row0 + i);
@@ -314,7 +322,7 @@ struct TiledLuSolverStatic {
     }
 
     /* =====================================================================
-       Diagonal-tile factorization with out-of-block pivoting.
+       Diagonal-tile factorization with out-of-tile pivoting.
        Shared by both schedules; the only schedule-dependent part is the
        replay a candidate row needs before it can be compared:
          RL - the trailing matrix is already Schur-updated, so a candidate
@@ -324,7 +332,7 @@ struct TiledLuSolverStatic {
        ===================================================================== */
 
     /// \brief One column step of the diagonal-tile factorization: pivot
-    /// search (in-tile, then out-of-block recovery), permutation update,
+    /// search (in-tile, then out-of-tile recovery), permutation update,
     /// row swap or cross-tile pull, column elimination.
     ///
     /// `tile` holds the (LL: prior-corrected) KExKE diagonal tile; physical
@@ -332,7 +340,7 @@ struct TiledLuSolverStatic {
     /// \tparam KE           extent of the diagonal tile
     /// \tparam internal_piv residency of piv
     /// \tparam internal_matrix residency of A
-    /// \tparam oob_diag     compile the out-of-block counter in or out
+    /// \tparam oot_diag     compile the out-of-tile counter in or out
     /// \tparam fuse_rhs     apply the pivot swaps to the fused RHS y
     /// \tparam internal_rhs residency of y
     /// \param[in,out] A          matrix (caller-pre-offset)
@@ -341,16 +349,16 @@ struct TiledLuSolverStatic {
     /// \param[in]     piv_stride element stride of piv (external mode)
     /// \param[in]     k0         first global row/column of the tile
     /// \param[in,out] tile       register-resident diagonal tile
-    /// \param[in,out] oob_count  out-of-block search counter (oob_diag)
+    /// \param[in,out] oot_count  out-of-tile search counter (oot_diag)
     /// \param[in]     c          tile column to factor
     /// \param[in,out] y          fused right-hand side (fuse_rhs only)
     /// \param[in]     rhs_stride element stride of y (external mode)
     /// \return false when the matrix is singular at this column.
-    template<int KE, bool internal_piv, bool internal_matrix, bool oob_diag, bool fuse_rhs,
+    template<int KE, bool internal_piv, bool internal_matrix, bool oot_diag, bool fuse_rhs,
              bool internal_rhs>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
     factor_diag_column(T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
-                       const int piv_stride, const int k0, T* TDLS_RESTRICT tile, int& oob_count,
+                       const int piv_stride, const int k0, T* TDLS_RESTRICT tile, int& oot_count,
                        const int c, T* TDLS_RESTRICT y, const int rhs_stride) {
 
         const int gc = k0 + c; // global column
@@ -358,7 +366,7 @@ struct TiledLuSolverStatic {
         // In-tile pivot search (rows c..KE of the register tile)
         int best_r = c;
         T best     = std::fabs(tile[c * TS + c]);
-        if constexpr (Cfg::unroll_inner) {
+        if constexpr (TiledSolverConfig::unroll_inner) {
             TDLS_UNROLL_FORCE
             for (int r = c + 1; r < KE; ++r) {
                 const T v = std::fabs(tile[r * TS + c]);
@@ -379,22 +387,22 @@ struct TiledLuSolverStatic {
 
         int piv_row; // winning global (logical) row
 
-        if (best >= Cfg::oob_threshold) {
+        if (best >= TiledSolverConfig::oot_threshold) {
             piv_row = k0 + best_r;
         } else if constexpr (KE < TS) {
             // Trailing tile: no rows below to recover from. Diagnostic
             // order: singularity verdict first, then count the weak pivot
             // (full tiles count before the verdict).
-            if (best < Cfg::singular_eps) return false;
-            if constexpr (oob_diag) ++oob_count;
+            if (best < TiledSolverConfig::singular_eps) return false;
+            if constexpr (oot_diag) ++oot_count;
             piv_row = k0 + best_r;
         } else {
-            // Out-of-block recovery: scan the rows below the tile and
+            // Out-of-tile recovery: scan the rows below the tile and
             // evaluate each candidate as if it had received the
             // eliminations it is missing, keeping the best (or, with
-            // Cfg::oob_first_acceptable, the first to reach the threshold).
+            // TiledSolverConfig::oot_first_acceptable, the first to reach the threshold).
             // Cold path - never unroll-annotated.
-            if constexpr (oob_diag) ++oob_count;
+            if constexpr (oot_diag) ++oot_count;
             T gbest       = best;
             int gbest_row = k0 + best_r;
 
@@ -431,15 +439,15 @@ struct TiledLuSolverStatic {
                     gbest_row = row;
                 }
 
-                // First-acceptable out-of-block pivot: a candidate that
+                // First-acceptable out-of-tile pivot: a candidate that
                 // reaches the threshold already beats the sub-threshold
                 // in-tile pivot, so stop scanning. The running max above is
                 // kept as the fallback when no candidate is acceptable.
-                if constexpr (Cfg::oob_first_acceptable)
-                    if (v >= Cfg::oob_threshold) break;
+                if constexpr (TiledSolverConfig::oot_first_acceptable)
+                    if (v >= TiledSolverConfig::oot_threshold) break;
             }
 
-            if (gbest < Cfg::singular_eps) return false;
+            if (gbest < TiledSolverConfig::singular_eps) return false;
             piv_row = gbest_row;
         }
 
@@ -459,7 +467,7 @@ struct TiledLuSolverStatic {
                 // range - y must never be dynamically indexed or it is
                 // demoted to local memory.
                 if constexpr (internal_rhs) {
-                    if constexpr (Cfg::unroll_inner) {
+                    if constexpr (TiledSolverConfig::unroll_inner) {
                         TDLS_UNROLL_FORCE
                         for (int r = 0; r < N; ++r) {
                             if (r == piv_row) {
@@ -491,7 +499,7 @@ struct TiledLuSolverStatic {
                 // replay everything it missed - prior tiles (LL), then
                 // the current tile's factored columns, on the FULL row.
                 const int phys = TDLS_PIV(gc);
-                if constexpr (Cfg::unroll_inner) {
+                if constexpr (TiledSolverConfig::unroll_inner) {
                     TDLS_UNROLL_FORCE
                     for (int j = 0; j < KE; ++j) {
                         tile[c * TS + j] = TDLS_A(phys, k0 + j);
@@ -536,12 +544,12 @@ struct TiledLuSolverStatic {
     }
 
     /// \brief Factor the KExKE diagonal tile in registers, with
-    /// out-of-block pivot recovery (drives the per-column loop of
+    /// out-of-tile pivot recovery (drives the per-column loop of
     /// factor_diag_column).
     /// \tparam KE           extent of the diagonal tile
     /// \tparam internal_piv residency of piv
     /// \tparam internal_matrix residency of A
-    /// \tparam oob_diag     compile the out-of-block counter in or out
+    /// \tparam oot_diag     compile the out-of-tile counter in or out
     /// \tparam fuse_rhs     apply the pivot swaps to the fused RHS y
     /// \tparam internal_rhs residency of y
     /// \param[in,out] A          matrix (caller-pre-offset)
@@ -551,29 +559,29 @@ struct TiledLuSolverStatic {
     /// \param[in]     k0         first global row/column of the tile
     /// \param[in,out] tile       register-resident diagonal tile, loaded
     ///                (and, LL: prior-corrected) by the caller
-    /// \param[in,out] oob_count  out-of-block search counter (oob_diag)
+    /// \param[in,out] oot_count  out-of-tile search counter (oot_diag)
     /// \param[in,out] y          fused right-hand side (fuse_rhs only)
     /// \param[in]     rhs_stride element stride of y (external mode)
     /// \return false on a singular matrix.
-    template<int KE, bool internal_piv, bool internal_matrix, bool oob_diag, bool fuse_rhs = false,
+    template<int KE, bool internal_piv, bool internal_matrix, bool oot_diag, bool fuse_rhs = false,
              bool internal_rhs = true>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
     factor_diag_tile(T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
-                     const int piv_stride, const int k0, T* TDLS_RESTRICT tile, int& oob_count,
+                     const int piv_stride, const int k0, T* TDLS_RESTRICT tile, int& oot_count,
                      T* TDLS_RESTRICT y = nullptr, const int rhs_stride = 1) {
-        if constexpr (Cfg::unroll_inner) {
+        if constexpr (TiledSolverConfig::unroll_inner) {
             TDLS_UNROLL_FORCE
             for (int c = 0; c < KE; ++c) {
-                if (!factor_diag_column<KE, internal_piv, internal_matrix, oob_diag, fuse_rhs,
+                if (!factor_diag_column<KE, internal_piv, internal_matrix, oot_diag, fuse_rhs,
                                         internal_rhs>(A, A_stride, piv, piv_stride, k0, tile,
-                                                      oob_count, c, y, rhs_stride))
+                                                      oot_count, c, y, rhs_stride))
                     return false;
             }
         } else {
             for (int c = 0; c < KE; ++c) {
-                if (!factor_diag_column<KE, internal_piv, internal_matrix, oob_diag, fuse_rhs,
+                if (!factor_diag_column<KE, internal_piv, internal_matrix, oot_diag, fuse_rhs,
                                         internal_rhs>(A, A_stride, piv, piv_stride, k0, tile,
-                                                      oob_count, c, y, rhs_stride))
+                                                      oot_count, c, y, rhs_stride))
                     return false;
             }
         }
@@ -627,7 +635,7 @@ struct TiledLuSolverStatic {
         T Aij[TS * TS];
         load_tile<IE, JE, internal_matrix>(A, A_stride, pi, j0, Aij);
 
-        if constexpr (Cfg::unroll_inner) {
+        if constexpr (TiledSolverConfig::unroll_inner) {
             TDLS_UNROLL_FORCE
             for (int p = 0; p < KE; ++p) {
                 T Akj_row[TS];
@@ -686,7 +694,7 @@ struct TiledLuSolverStatic {
         const int k0 = k * TS;
 
         int pi[TS];
-        if constexpr (Cfg::unroll_inner) {
+        if constexpr (TiledSolverConfig::unroll_inner) {
             TDLS_UNROLL_FORCE
             for (int i = 0; i < IE; ++i)
                 pi[i] = TDLS_PIV(i0 + i);
@@ -705,7 +713,7 @@ struct TiledLuSolverStatic {
         // row block while its L panel sits in registers (this is the whole
         // point of solve_fused - the separate forward pass reloads vanish).
         if constexpr (fuse_rhs) {
-            if constexpr (Cfg::unroll_inner) {
+            if constexpr (TiledSolverConfig::unroll_inner) {
                 TDLS_UNROLL_FORCE
                 for (int r = 0; r < IE; ++r) {
                     T sum = T(0);
@@ -736,7 +744,7 @@ struct TiledLuSolverStatic {
     /// \tparam KE           extent of the diagonal tile of this step
     /// \tparam internal_piv residency of piv
     /// \tparam internal_matrix residency of A
-    /// \tparam oob_diag     compile the out-of-block counter in or out
+    /// \tparam oot_diag     compile the out-of-tile counter in or out
     /// \tparam fuse_rhs     apply the step to the fused RHS y (solve_fused)
     /// \tparam internal_rhs residency of y
     /// \param[in,out] A          matrix (caller-pre-offset)
@@ -744,28 +752,28 @@ struct TiledLuSolverStatic {
     /// \param[in,out] piv        permutation (logical -> physical row)
     /// \param[in]     piv_stride element stride of piv (external mode)
     /// \param[in]     k          step index (k0 = k*TS)
-    /// \param[in,out] oob_count  out-of-block search counter (oob_diag)
+    /// \param[in,out] oot_count  out-of-tile search counter (oot_diag)
     /// \param[in,out] y          fused right-hand side (fuse_rhs only)
     /// \param[in]     rhs_stride element stride of y (external mode)
     /// \return false on a singular matrix.
-    template<int KE, bool internal_piv, bool internal_matrix, bool oob_diag, bool fuse_rhs = false,
+    template<int KE, bool internal_piv, bool internal_matrix, bool oot_diag, bool fuse_rhs = false,
              bool internal_rhs = true>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
     rl_step(T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv, const int piv_stride,
-            const int k, int& oob_count, T* TDLS_RESTRICT y = nullptr, const int rhs_stride = 1) {
+            const int k, int& oot_count, T* TDLS_RESTRICT y = nullptr, const int rhs_stride = 1) {
         const int k0 = k * TS;
 
         T tile[TS * TS];
         load_tile_piv<KE, KE, internal_piv, internal_matrix>(A, A_stride, piv, piv_stride, k0, k0,
                                                              tile);
 
-        if (!factor_diag_tile<KE, internal_piv, internal_matrix, oob_diag, fuse_rhs, internal_rhs>(
-                A, A_stride, piv, piv_stride, k0, tile, oob_count, y, rhs_stride))
+        if (!factor_diag_tile<KE, internal_piv, internal_matrix, oot_diag, fuse_rhs, internal_rhs>(
+                A, A_stride, piv, piv_stride, k0, tile, oot_count, y, rhs_stride))
             return false;
 
         // Physical rows of the tile after the swaps of this step
         int pk[TS];
-        if constexpr (Cfg::unroll_inner) {
+        if constexpr (TiledSolverConfig::unroll_inner) {
             TDLS_UNROLL_FORCE
             for (int i = 0; i < KE; ++i)
                 pk[i] = TDLS_PIV(k0 + i);
@@ -779,7 +787,7 @@ struct TiledLuSolverStatic {
         // Fused forward substitution: this tile's y segment is final from
         // here on - unit-lower-solve it while the tile is in registers.
         if constexpr (fuse_rhs) {
-            if constexpr (Cfg::unroll_inner) {
+            if constexpr (TiledSolverConfig::unroll_inner) {
                 TDLS_UNROLL_FORCE
                 for (int kk = 0; kk < KE; ++kk) {
                     TDLS_UNROLL_FORCE
@@ -885,7 +893,7 @@ struct TiledLuSolverStatic {
         // Fused forward substitution: B is the final L(i,k) panel - push the
         // solved y_k segment into this row block while it is in registers.
         if constexpr (fuse_rhs) {
-            if constexpr (Cfg::unroll_inner) {
+            if constexpr (TiledSolverConfig::unroll_inner) {
                 TDLS_UNROLL_FORCE
                 for (int r = 0; r < IE; ++r) {
                     T sum = T(0);
@@ -937,7 +945,7 @@ struct TiledLuSolverStatic {
     /// \tparam KE           extent of the diagonal tile of this step
     /// \tparam internal_piv residency of piv
     /// \tparam internal_matrix residency of A
-    /// \tparam oob_diag     compile the out-of-block counter in or out
+    /// \tparam oot_diag     compile the out-of-tile counter in or out
     /// \tparam fuse_rhs     apply the step to the fused RHS y (solve_fused)
     /// \tparam internal_rhs residency of y
     /// \param[in,out] A          matrix (caller-pre-offset)
@@ -945,15 +953,15 @@ struct TiledLuSolverStatic {
     /// \param[in,out] piv        permutation (logical -> physical row)
     /// \param[in]     piv_stride element stride of piv (external mode)
     /// \param[in]     k          step index (k0 = k*TS)
-    /// \param[in,out] oob_count  out-of-block search counter (oob_diag)
+    /// \param[in,out] oot_count  out-of-tile search counter (oot_diag)
     /// \param[in,out] y          fused right-hand side (fuse_rhs only)
     /// \param[in]     rhs_stride element stride of y (external mode)
     /// \return false on a singular matrix.
-    template<int KE, bool internal_piv, bool internal_matrix, bool oob_diag, bool fuse_rhs = false,
+    template<int KE, bool internal_piv, bool internal_matrix, bool oot_diag, bool fuse_rhs = false,
              bool internal_rhs = true>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
     ll_step(T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv, const int piv_stride,
-            const int k, int& oob_count, T* TDLS_RESTRICT y = nullptr, const int rhs_stride = 1) {
+            const int k, int& oot_count, T* TDLS_RESTRICT y = nullptr, const int rhs_stride = 1) {
         const int k0 = k * TS;
 
         T tile[TS * TS];
@@ -962,8 +970,8 @@ struct TiledLuSolverStatic {
         ll_correct_tile<KE, KE, internal_piv, internal_matrix>(A, A_stride, piv, piv_stride, k0, k0,
                                                                k0, tile);
 
-        if (!factor_diag_tile<KE, internal_piv, internal_matrix, oob_diag, fuse_rhs, internal_rhs>(
-                A, A_stride, piv, piv_stride, k0, tile, oob_count, y, rhs_stride))
+        if (!factor_diag_tile<KE, internal_piv, internal_matrix, oot_diag, fuse_rhs, internal_rhs>(
+                A, A_stride, piv, piv_stride, k0, tile, oot_count, y, rhs_stride))
             return false;
 
         store_tile_piv<KE, KE, internal_piv, internal_matrix>(A, A_stride, piv, piv_stride, k0, k0,
@@ -972,7 +980,7 @@ struct TiledLuSolverStatic {
         // Fused forward substitution: this tile's y segment is final from
         // here on - unit-lower-solve it while the tile is in registers.
         if constexpr (fuse_rhs) {
-            if constexpr (Cfg::unroll_inner) {
+            if constexpr (TiledSolverConfig::unroll_inner) {
                 TDLS_UNROLL_FORCE
                 for (int kk = 0; kk < KE; ++kk) {
                     TDLS_UNROLL_FORCE
@@ -1019,9 +1027,9 @@ struct TiledLuSolverStatic {
     ///         ignored; false: piv is remote, indexed with piv_stride
     /// \tparam internal_matrix true: A is a caller-local T[N*N], stride
     ///         ignored; false: A is remote, indexed with A_stride
-    /// \tparam oob_diag when false, the out-of-block diagnostics are
+    /// \tparam oot_diag when false, the out-of-tile diagnostics are
     ///         compiled out entirely (no counter register, no increments,
-    ///         oob_count untouched) - use the overload without the
+    ///         oot_count untouched) - use the overload without the
     ///         out-parameter
     /// \param[in,out] A          matrix, pre-offset by the caller
     /// \param[in]     A_stride   element stride of A (external mode)
@@ -1031,20 +1039,20 @@ struct TiledLuSolverStatic {
     ///         substitution of y into the factorization
     /// \tparam internal_rhs residency of the fused y (meaningful with
     ///         fuse_rhs only)
-    /// \param[out]    oob_count  number of columns that needed the
-    ///                out-of-block pivot search
+    /// \param[out]    oot_count  number of columns that needed the
+    ///                out-of-tile pivot search
     /// \param[in,out] y          fused right-hand side (fuse_rhs only)
     /// \param[in]     rhs_stride element stride of y (external mode)
     /// \return false on a singular matrix.
-    template<bool internal_piv = true, bool internal_matrix = false, bool oob_diag = true,
-             bool fuse_rhs = false, bool internal_rhs = true>
+    template<bool internal_piv, bool internal_matrix, bool oot_diag = true, bool fuse_rhs = false,
+             bool internal_rhs = true>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
     factorize(T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv, const int piv_stride,
-              int& oob_count, T* TDLS_RESTRICT y = nullptr, const int rhs_stride = 1) {
+              int& oot_count, T* TDLS_RESTRICT y = nullptr, const int rhs_stride = 1) {
 
-        if constexpr (oob_diag) oob_count = 0;
+        if constexpr (oot_diag) oot_count = 0;
 
-        if constexpr (Cfg::unroll_inner) {
+        if constexpr (TiledSolverConfig::unroll_inner) {
             TDLS_UNROLL_FORCE
             for (int i = 0; i < N; ++i)
                 TDLS_PIV(i) = i;
@@ -1055,28 +1063,28 @@ struct TiledLuSolverStatic {
 
         if constexpr (Sched == TiledLuSchedule::RightLooking) {
             for (int k = 0; k < F; ++k)
-                if (!rl_step<TS, internal_piv, internal_matrix, oob_diag, fuse_rhs, internal_rhs>(
-                        A, A_stride, piv, piv_stride, k, oob_count, y, rhs_stride))
+                if (!rl_step<TS, internal_piv, internal_matrix, oot_diag, fuse_rhs, internal_rhs>(
+                        A, A_stride, piv, piv_stride, k, oot_count, y, rhs_stride))
                     return false;
             if constexpr (TAIL > 0)
-                if (!rl_step<TAIL, internal_piv, internal_matrix, oob_diag, fuse_rhs, internal_rhs>(
-                        A, A_stride, piv, piv_stride, F, oob_count, y, rhs_stride))
+                if (!rl_step<TAIL, internal_piv, internal_matrix, oot_diag, fuse_rhs, internal_rhs>(
+                        A, A_stride, piv, piv_stride, F, oot_count, y, rhs_stride))
                     return false;
         } else {
             for (int k = 0; k < F; ++k)
-                if (!ll_step<TS, internal_piv, internal_matrix, oob_diag, fuse_rhs, internal_rhs>(
-                        A, A_stride, piv, piv_stride, k, oob_count, y, rhs_stride))
+                if (!ll_step<TS, internal_piv, internal_matrix, oot_diag, fuse_rhs, internal_rhs>(
+                        A, A_stride, piv, piv_stride, k, oot_count, y, rhs_stride))
                     return false;
             if constexpr (TAIL > 0)
-                if (!ll_step<TAIL, internal_piv, internal_matrix, oob_diag, fuse_rhs, internal_rhs>(
-                        A, A_stride, piv, piv_stride, F, oob_count, y, rhs_stride))
+                if (!ll_step<TAIL, internal_piv, internal_matrix, oot_diag, fuse_rhs, internal_rhs>(
+                        A, A_stride, piv, piv_stride, F, oot_count, y, rhs_stride))
                     return false;
         }
 
         return true;
     }
 
-    /// \brief Diagnostics-free factorize overload: no out-of-block
+    /// \brief Diagnostics-free factorize overload: no out-of-tile
     /// out-parameter at all.
     /// \tparam internal_piv residency of piv
     /// \tparam internal_matrix residency of A
@@ -1085,7 +1093,7 @@ struct TiledLuSolverStatic {
     /// \param[out]    piv        permutation storage (always caller-provided)
     /// \param[in]     piv_stride element stride of piv (external mode)
     /// \return false on a singular matrix.
-    template<bool internal_piv = true, bool internal_matrix = false>
+    template<bool internal_piv, bool internal_matrix>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool factorize(T* TDLS_RESTRICT A, const int A_stride,
                                                             int* TDLS_RESTRICT piv,
                                                             const int piv_stride) {
@@ -1126,7 +1134,7 @@ struct TiledLuSolverStatic {
         T Lmk[TS * TS];
         load_tile_piv<ME, KE, internal_piv, internal_matrix>(A, A_stride, piv, piv_stride, m0, k0,
                                                              Lmk);
-        if constexpr (Cfg::unroll_inner) {
+        if constexpr (TiledSolverConfig::unroll_inner) {
             TDLS_UNROLL_FORCE
             for (int i = 0; i < ME; ++i) {
                 TDLS_UNROLL_FORCE
@@ -1177,7 +1185,7 @@ struct TiledLuSolverStatic {
                                                                Lkk);
 
         // In-tile unit-lower solve
-        if constexpr (Cfg::unroll_inner) {
+        if constexpr (TiledSolverConfig::unroll_inner) {
             TDLS_UNROLL_FORCE
             for (int kk = 0; kk < KE; ++kk) {
                 TDLS_UNROLL_FORCE
@@ -1230,7 +1238,7 @@ struct TiledLuSolverStatic {
         T Ukm[TS * TS];
         load_tile_piv<KE, ME, internal_piv, internal_matrix>(A, A_stride, piv, piv_stride, k0, m0,
                                                              Ukm);
-        if constexpr (Cfg::unroll_inner) {
+        if constexpr (TiledSolverConfig::unroll_inner) {
             TDLS_UNROLL_FORCE
             for (int i = 0; i < KE; ++i) {
                 TDLS_UNROLL_FORCE
@@ -1289,7 +1297,7 @@ struct TiledLuSolverStatic {
         load_tile_piv_upper<KE, internal_piv, internal_matrix>(A, A_stride, piv, piv_stride, k0, k0,
                                                                Ukk);
 
-        if constexpr (Cfg::unroll_inner) {
+        if constexpr (TiledSolverConfig::unroll_inner) {
             TDLS_UNROLL_FORCE
             for (int kk = KE - 1; kk >= 0; --kk) {
                 TDLS_UNROLL_FORCE
@@ -1389,7 +1397,7 @@ struct TiledLuSolverStatic {
     /// \param[in]  b          right-hand side, in original (unpermuted) order
     /// \param[out] x          solution
     /// \param[in]  rhs_stride element stride of b and x (external mode)
-    template<bool internal_rhs = true, bool internal_piv = true, bool internal_matrix = false>
+    template<bool internal_rhs, bool internal_piv, bool internal_matrix>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static void
     substitute(const T* TDLS_RESTRICT A, const int A_stride, const int* TDLS_RESTRICT piv,
                const int piv_stride, const T* TDLS_RESTRICT b, T* TDLS_RESTRICT x,
@@ -1399,7 +1407,7 @@ struct TiledLuSolverStatic {
             // a runtime value and demote it to local memory. The equality
             // sweep keeps every index compile-time (measured: local memory
             // eliminated, identical values).
-            if constexpr (Cfg::unroll_inner) {
+            if constexpr (TiledSolverConfig::unroll_inner) {
                 TDLS_UNROLL_FORCE
                 for (int i = 0; i < N; ++i) {
                     const int p = TDLS_PIV(i);
@@ -1419,7 +1427,7 @@ struct TiledLuSolverStatic {
                 }
             }
         } else {
-            if constexpr (Cfg::unroll_inner) {
+            if constexpr (TiledSolverConfig::unroll_inner) {
                 TDLS_UNROLL_FORCE
                 for (int i = 0; i < N; ++i)
                     TDLS_X(i) = TDLS_B(TDLS_PIV(i));
@@ -1448,7 +1456,7 @@ struct TiledLuSolverStatic {
     /// \param[in]  col        index of the canonical column e_col
     /// \param[out] x          solution
     /// \param[in]  rhs_stride element stride of x (external mode)
-    template<bool internal_rhs = true, bool internal_piv = true, bool internal_matrix = false>
+    template<bool internal_rhs, bool internal_piv, bool internal_matrix>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static void
     substitute_canonical(const T* TDLS_RESTRICT A, const int A_stride, const int* TDLS_RESTRICT piv,
                          const int piv_stride, const int col, T* TDLS_RESTRICT x,
@@ -1477,13 +1485,12 @@ struct TiledLuSolverStatic {
     /// \param[in]  rhs_stride  element stride of x (external mode)
     /// \param[in]  xcol_stride element stride between columns of x
     ///             (external mode)
-    template<int W, bool internal_rhs = true, bool internal_piv = true,
-             bool internal_matrix = false>
+    template<int W, bool internal_rhs, bool internal_piv, bool internal_matrix>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static void
     substitute_canonical_block(const T* TDLS_RESTRICT A, const int A_stride,
                                const int* TDLS_RESTRICT piv, const int piv_stride, const int col0,
                                T* TDLS_RESTRICT x, const int rhs_stride, const int xcol_stride) {
-        if constexpr (Cfg::unroll_inner) {
+        if constexpr (TiledSolverConfig::unroll_inner) {
             TDLS_UNROLL_FORCE
             for (int i = 0; i < N; ++i) {
                 const int p = TDLS_PIV(i);
@@ -1520,7 +1527,7 @@ struct TiledLuSolverStatic {
     /// \param[in]     piv_stride element stride of piv (external mode)
     /// \param[in,out] x          right-hand side on entry, solution on exit
     /// \param[in]     rhs_stride element stride of x (external mode)
-    template<bool internal_rhs = true, bool internal_piv = true, bool internal_matrix = false>
+    template<bool internal_rhs, bool internal_piv, bool internal_matrix>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static void
     substitute_inplace(const T* TDLS_RESTRICT A, const int A_stride, const int* TDLS_RESTRICT piv,
                        const int piv_stride, T* TDLS_RESTRICT x, const int rhs_stride) {
@@ -1529,7 +1536,7 @@ struct TiledLuSolverStatic {
             // whole state in a single 32- or 64-bit register.
             using mask_t   = std::conditional_t<(N <= 32), unsigned, unsigned long long>;
             mask_t visited = mask_t(0);
-            if constexpr (Cfg::unroll_inner) {
+            if constexpr (TiledSolverConfig::unroll_inner) {
                 TDLS_UNROLL_FORCE
                 for (int s = 0; s < N; ++s) {
                     if ((visited >> s) & mask_t(1)) continue;
@@ -1594,7 +1601,7 @@ struct TiledLuSolverStatic {
     /// \tparam internal_rhs residency of b and x
     /// \tparam internal_piv residency of piv
     /// \tparam internal_matrix residency of A
-    /// \tparam oob_diag     compile the out-of-block counter in or out
+    /// \tparam oot_diag     compile the out-of-tile counter in or out
     /// \param[in,out] A          on entry the matrix (pre-offset by the
     ///                caller), on exit its factorization (usable for
     ///                further substitute* calls)
@@ -1604,23 +1611,22 @@ struct TiledLuSolverStatic {
     /// \param[in]     b          right-hand side, in original order
     /// \param[out]    x          solution
     /// \param[in]     rhs_stride element stride of b and x (external mode)
-    /// \param[out]    oob_count  number of columns that needed the
-    ///                out-of-block pivot search
+    /// \param[out]    oot_count  number of columns that needed the
+    ///                out-of-tile pivot search
     /// \return false on a singular matrix.
-    template<bool internal_rhs = true, bool internal_piv = true, bool internal_matrix = false,
-             bool oob_diag = true>
+    template<bool internal_rhs, bool internal_piv, bool internal_matrix, bool oot_diag = true>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
     solve(T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv, const int piv_stride,
-          const T* TDLS_RESTRICT b, T* TDLS_RESTRICT x, const int rhs_stride, int& oob_count) {
-        if (!factorize<internal_piv, internal_matrix, oob_diag>(A, A_stride, piv, piv_stride,
-                                                                oob_count))
+          const T* TDLS_RESTRICT b, T* TDLS_RESTRICT x, const int rhs_stride, int& oot_count) {
+        if (!factorize<internal_piv, internal_matrix, oot_diag>(A, A_stride, piv, piv_stride,
+                                                                oot_count))
             return false;
         substitute<internal_rhs, internal_piv, internal_matrix>(A, A_stride, piv, piv_stride, b, x,
                                                                 rhs_stride);
         return true;
     }
 
-    /// \brief Diagnostics-free solve overload: no out-of-block
+    /// \brief Diagnostics-free solve overload: no out-of-tile
     /// out-parameter at all.
     /// \tparam internal_rhs residency of b and x
     /// \tparam internal_piv residency of piv
@@ -1634,7 +1640,7 @@ struct TiledLuSolverStatic {
     /// \param[out]    x          solution
     /// \param[in]     rhs_stride element stride of b and x (external mode)
     /// \return false on a singular matrix.
-    template<bool internal_rhs = true, bool internal_piv = true, bool internal_matrix = false>
+    template<bool internal_rhs, bool internal_piv, bool internal_matrix>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
     solve(T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv, const int piv_stride,
           const T* TDLS_RESTRICT b, T* TDLS_RESTRICT x, const int rhs_stride) {
@@ -1656,7 +1662,7 @@ struct TiledLuSolverStatic {
     /// \tparam internal_rhs residency of y
     /// \tparam internal_piv residency of piv
     /// \tparam internal_matrix residency of A
-    /// \tparam oob_diag     compile the out-of-block counter in or out
+    /// \tparam oot_diag     compile the out-of-tile counter in or out
     /// \param[in,out] A          on entry the matrix (pre-offset by the
     ///                caller), on exit its factorization
     /// \param[in]     A_stride   element stride of A (external mode)
@@ -1664,16 +1670,15 @@ struct TiledLuSolverStatic {
     /// \param[in]     piv_stride element stride of piv (external mode)
     /// \param[in,out] y          right-hand side on entry, solution on exit
     /// \param[in]     rhs_stride element stride of y (external mode)
-    /// \param[out]    oob_count  number of columns that needed the
-    ///                out-of-block pivot search
+    /// \param[out]    oot_count  number of columns that needed the
+    ///                out-of-tile pivot search
     /// \return false on a singular matrix (y left partially updated).
-    template<bool internal_rhs = true, bool internal_piv = true, bool internal_matrix = false,
-             bool oob_diag = true>
+    template<bool internal_rhs, bool internal_piv, bool internal_matrix, bool oot_diag = true>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
     solve_fused(T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
-                const int piv_stride, T* TDLS_RESTRICT y, const int rhs_stride, int& oob_count) {
-        if (!factorize<internal_piv, internal_matrix, oob_diag, true, internal_rhs>(
-                A, A_stride, piv, piv_stride, oob_count, y, rhs_stride))
+                const int piv_stride, T* TDLS_RESTRICT y, const int rhs_stride, int& oot_count) {
+        if (!factorize<internal_piv, internal_matrix, oot_diag, true, internal_rhs>(
+                A, A_stride, piv, piv_stride, oot_count, y, rhs_stride))
             return false;
 
         // Backward pass only - the forward one happened inside factorize.
@@ -1682,7 +1687,7 @@ struct TiledLuSolverStatic {
         return true;
     }
 
-    /// \brief Diagnostics-free solve_fused overload: no out-of-block
+    /// \brief Diagnostics-free solve_fused overload: no out-of-tile
     /// out-parameter at all.
     /// \tparam internal_rhs residency of y
     /// \tparam internal_piv residency of piv
@@ -1695,7 +1700,7 @@ struct TiledLuSolverStatic {
     /// \param[in,out] y          right-hand side on entry, solution on exit
     /// \param[in]     rhs_stride element stride of y (external mode)
     /// \return false on a singular matrix (y left partially updated).
-    template<bool internal_rhs = true, bool internal_piv = true, bool internal_matrix = false>
+    template<bool internal_rhs, bool internal_piv, bool internal_matrix>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
     solve_fused(T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
                 const int piv_stride, T* TDLS_RESTRICT y, const int rhs_stride) {

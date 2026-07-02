@@ -8,17 +8,17 @@
 /// \author Tristan Chenaille
 ///
 /// Same algorithm as TiledLuSolverStatic (solver_static.hpp) - tiled LU with logical
-/// partial pivoting, out-of-block recovery, reciprocal-diagonal factored
+/// partial pivoting, out-of-tile recovery, reciprocal-diagonal factored
 /// format, right- and left-looking schedules - but the system dimension n
 /// is a runtime function parameter instead of a template parameter. Only
-/// the tile extent TS stays compile-time (register tiles keep a fixed
-/// TSxTS footprint; all loop bounds over tiles and inside partial tiles
-/// are runtime values).
+/// the tile size (TiledSolverConfig::tile_size) stays compile-time:
+/// register tiles keep a fixed TSxTS footprint, while all loop bounds
+/// over tiles and inside partial tiles are runtime values.
 ///
 /// Deliberate differences with the compile-time solver:
 ///   - No unroll pragma anywhere: with runtime bounds nothing can be
 ///     register-resident by full unrolling, so the unroll_inner knob of
-///     Cfg is ignored.
+///     TiledSolverConfig is ignored.
 ///   - No internal_rhs / internal_piv / internal_matrix booleans: without
 ///     unrolling, the internal residency mode degenerates into "external
 ///     with stride 1", so every array is plain pointer + stride. The
@@ -28,7 +28,7 @@
 ///     same for every lane): a 64-bit visited bitmask up to n = 64, a
 ///     cycle-leader scan beyond - zero extra storage and no ceiling on n.
 ///
-/// For equal shapes (same n, TS, schedule, Cfg thresholds), results are
+/// For equal shapes (same n, TS, schedule, TiledSolverConfig thresholds), results are
 /// bitwise identical to the compile-time solver: the arithmetic sequence
 /// is the same, only addressing and loop mechanics differ.
 ///
@@ -64,7 +64,7 @@ namespace tdls {
 
 
 /// \brief Runtime-size tiled dense LU factorization with logical partial
-/// pivoting and out-of-block pivot recovery, solving one n x n system per
+/// pivoting and out-of-tile pivot recovery, solving one n x n system per
 /// call.
 ///
 /// All entry points are static, host- and device-callable, and take the
@@ -81,14 +81,15 @@ namespace tdls {
 /// in TiledLuSolverStatic: a factorization produced here must be consumed by the
 /// substitution routines of this family.
 ///
-/// \tparam T     scalar type (float or double)
-/// \tparam TS    tile extent (TS >= 2; may exceed n)
-/// \tparam Sched elimination schedule (right- or left-looking)
-/// \tparam Cfg   compile-time knobs, see TiledLuDefaultConfig
-///               (unroll_inner is ignored by this variant)
-template<typename T, int TS, TiledLuSchedule Sched = TiledLuSchedule::RightLooking,
-         typename Cfg = TiledLuDefaultConfig<T>>
+/// \tparam T                 scalar type (float or double)
+/// \tparam TiledSolverConfig compile-time knobs - tile size (may exceed
+///         n), schedule, pivoting thresholds; see TiledLuDefaultConfig and
+///         TiledLuConfig (unroll_inner is ignored by this variant)
+template<typename T, typename TiledSolverConfig = TiledLuDefaultConfig<T>>
 struct TiledLuSolverDynamic {
+
+    static constexpr int TS                = TiledSolverConfig::tile_size;
+    static constexpr TiledLuSchedule Sched = TiledSolverConfig::schedule;
 
     static_assert(TS >= 2, "TiledLuSolverDynamic: tile size must be >= 2");
 
@@ -340,15 +341,15 @@ struct TiledLuSolverDynamic {
     }
 
     /* =====================================================================
-       Diagonal-tile factorization with out-of-block pivoting. Same
+       Diagonal-tile factorization with out-of-tile pivoting. Same
        algorithm as the static solver, runtime column/extent parameters,
        direct (unpredicated) fused-RHS swap.
        ===================================================================== */
 
     /// \brief One column step of the diagonal-tile factorization: pivot
-    /// search (in-tile, then out-of-block recovery), permutation update,
+    /// search (in-tile, then out-of-tile recovery), permutation update,
     /// row swap or cross-tile pull, column elimination.
-    /// \tparam oob_diag compile the out-of-block counter in or out
+    /// \tparam oot_diag compile the out-of-tile counter in or out
     /// \tparam fuse_rhs apply the pivot swaps to the fused RHS y
     /// \param[in]     n          system dimension
     /// \param[in,out] A          matrix (caller-pre-offset)
@@ -357,16 +358,16 @@ struct TiledLuSolverDynamic {
     /// \param[in]     piv_stride element stride of piv
     /// \param[in]     k0         first global row/column of the tile
     /// \param[in,out] tile       register-resident diagonal tile
-    /// \param[in,out] oob_count  out-of-block search counter (oob_diag)
+    /// \param[in,out] oot_count  out-of-tile search counter (oot_diag)
     /// \param[in]     c          tile column to factor
     /// \param[in]     ke         extent of the diagonal tile
     /// \param[in,out] y          fused right-hand side (fuse_rhs only)
     /// \param[in]     rhs_stride element stride of y
     /// \return false when the matrix is singular at this column.
-    template<bool oob_diag, bool fuse_rhs>
+    template<bool oot_diag, bool fuse_rhs>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
     factor_diag_column(const int n, T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
-                       const int piv_stride, const int k0, T* TDLS_RESTRICT tile, int& oob_count,
+                       const int piv_stride, const int k0, T* TDLS_RESTRICT tile, int& oot_count,
                        const int c, const int ke, T* TDLS_RESTRICT y, const int rhs_stride) {
 
         const int gc = k0 + c; // global column
@@ -384,21 +385,21 @@ struct TiledLuSolverDynamic {
 
         int piv_row; // winning global (logical) row
 
-        if (best >= Cfg::oob_threshold) {
+        if (best >= TiledSolverConfig::oot_threshold) {
             piv_row = k0 + best_r;
         } else if (ke < TS) {
             // Trailing tile: no rows below to recover from. Diagnostic
             // order: singularity verdict first, then count the weak pivot
             // (full tiles count before the verdict).
-            if (best < Cfg::singular_eps) return false;
-            if constexpr (oob_diag) ++oob_count;
+            if (best < TiledSolverConfig::singular_eps) return false;
+            if constexpr (oot_diag) ++oot_count;
             piv_row = k0 + best_r;
         } else {
-            // Out-of-block recovery: scan the rows below the tile and
+            // Out-of-tile recovery: scan the rows below the tile and
             // evaluate each candidate as if it had received the
             // eliminations it is missing, keeping the best (or, with
-            // Cfg::oob_first_acceptable, the first to reach the threshold).
-            if constexpr (oob_diag) ++oob_count;
+            // TiledSolverConfig::oot_first_acceptable, the first to reach the threshold).
+            if constexpr (oot_diag) ++oot_count;
             T gbest       = best;
             int gbest_row = k0 + best_r;
 
@@ -436,14 +437,14 @@ struct TiledLuSolverDynamic {
                     gbest_row = row;
                 }
 
-                // First-acceptable out-of-block pivot: a candidate that
+                // First-acceptable out-of-tile pivot: a candidate that
                 // reaches the threshold already beats the sub-threshold
                 // in-tile pivot, so stop scanning.
-                if constexpr (Cfg::oob_first_acceptable)
-                    if (v >= Cfg::oob_threshold) break;
+                if constexpr (TiledSolverConfig::oot_first_acceptable)
+                    if (v >= TiledSolverConfig::oot_threshold) break;
             }
 
-            if (gbest < Cfg::singular_eps) return false;
+            if (gbest < TiledSolverConfig::singular_eps) return false;
             piv_row = gbest_row;
         }
 
@@ -500,9 +501,9 @@ struct TiledLuSolverDynamic {
     }
 
     /// \brief Factor the ke x ke diagonal tile in registers, with
-    /// out-of-block pivot recovery (drives the per-column loop of
+    /// out-of-tile pivot recovery (drives the per-column loop of
     /// factor_diag_column).
-    /// \tparam oob_diag compile the out-of-block counter in or out
+    /// \tparam oot_diag compile the out-of-tile counter in or out
     /// \tparam fuse_rhs apply the pivot swaps to the fused RHS y
     /// \param[in]     n          system dimension
     /// \param[in,out] A          matrix (caller-pre-offset)
@@ -512,19 +513,19 @@ struct TiledLuSolverDynamic {
     /// \param[in]     k0         first global row/column of the tile
     /// \param[in,out] tile       register-resident diagonal tile, loaded
     ///                (and, LL: prior-corrected) by the caller
-    /// \param[in,out] oob_count  out-of-block search counter (oob_diag)
+    /// \param[in,out] oot_count  out-of-tile search counter (oot_diag)
     /// \param[in]     ke         extent of the diagonal tile
     /// \param[in,out] y          fused right-hand side (fuse_rhs only)
     /// \param[in]     rhs_stride element stride of y
     /// \return false on a singular matrix.
-    template<bool oob_diag, bool fuse_rhs>
+    template<bool oot_diag, bool fuse_rhs>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
     factor_diag_tile(const int n, T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
-                     const int piv_stride, const int k0, T* TDLS_RESTRICT tile, int& oob_count,
+                     const int piv_stride, const int k0, T* TDLS_RESTRICT tile, int& oot_count,
                      const int ke, T* TDLS_RESTRICT y = nullptr, const int rhs_stride = 1) {
         for (int c = 0; c < ke; ++c) {
-            if (!factor_diag_column<oob_diag, fuse_rhs>(n, A, A_stride, piv, piv_stride, k0, tile,
-                                                        oob_count, c, ke, y, rhs_stride))
+            if (!factor_diag_column<oot_diag, fuse_rhs>(n, A, A_stride, piv, piv_stride, k0, tile,
+                                                        oot_count, c, ke, y, rhs_stride))
                 return false;
         }
         return true;
@@ -640,7 +641,7 @@ struct TiledLuSolverDynamic {
 
     /// \brief RL: one full factorization step (diagonal tile + trailing
     /// updates).
-    /// \tparam oob_diag compile the out-of-block counter in or out
+    /// \tparam oot_diag compile the out-of-tile counter in or out
     /// \tparam fuse_rhs apply the step to the fused RHS y (solve_fused)
     /// \param[in]     n          system dimension
     /// \param[in,out] A          matrix (caller-pre-offset)
@@ -648,14 +649,14 @@ struct TiledLuSolverDynamic {
     /// \param[in,out] piv        permutation (logical -> physical row)
     /// \param[in]     piv_stride element stride of piv
     /// \param[in]     k          step index (k0 = k*TS)
-    /// \param[in,out] oob_count  out-of-block search counter (oob_diag)
+    /// \param[in,out] oot_count  out-of-tile search counter (oot_diag)
     /// \param[in,out] y          fused right-hand side (fuse_rhs only)
     /// \param[in]     rhs_stride element stride of y
     /// \return false on a singular matrix.
-    template<bool oob_diag, bool fuse_rhs>
+    template<bool oot_diag, bool fuse_rhs>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
     rl_step(const int n, T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
-            const int piv_stride, const int k, int& oob_count, T* TDLS_RESTRICT y = nullptr,
+            const int piv_stride, const int k, int& oot_count, T* TDLS_RESTRICT y = nullptr,
             const int rhs_stride = 1) {
         const int k0 = k * TS;
         const int nt = num_tiles(n);
@@ -664,8 +665,8 @@ struct TiledLuSolverDynamic {
         T tile[TS * TS];
         load_tile_piv(n, A, A_stride, piv, piv_stride, k0, k0, tile, ke, ke);
 
-        if (!factor_diag_tile<oob_diag, fuse_rhs>(n, A, A_stride, piv, piv_stride, k0, tile,
-                                                  oob_count, ke, y, rhs_stride))
+        if (!factor_diag_tile<oot_diag, fuse_rhs>(n, A, A_stride, piv, piv_stride, k0, tile,
+                                                  oot_count, ke, y, rhs_stride))
             return false;
 
         // Physical rows of the tile after the swaps of this step
@@ -790,7 +791,7 @@ struct TiledLuSolverDynamic {
 
     /// \brief LL: one full factorization step (correct + factor the
     /// diagonal tile, then its L and U panels).
-    /// \tparam oob_diag compile the out-of-block counter in or out
+    /// \tparam oot_diag compile the out-of-tile counter in or out
     /// \tparam fuse_rhs apply the step to the fused RHS y (solve_fused)
     /// \param[in]     n          system dimension
     /// \param[in,out] A          matrix (caller-pre-offset)
@@ -798,14 +799,14 @@ struct TiledLuSolverDynamic {
     /// \param[in,out] piv        permutation (logical -> physical row)
     /// \param[in]     piv_stride element stride of piv
     /// \param[in]     k          step index (k0 = k*TS)
-    /// \param[in,out] oob_count  out-of-block search counter (oob_diag)
+    /// \param[in,out] oot_count  out-of-tile search counter (oot_diag)
     /// \param[in,out] y          fused right-hand side (fuse_rhs only)
     /// \param[in]     rhs_stride element stride of y
     /// \return false on a singular matrix.
-    template<bool oob_diag, bool fuse_rhs>
+    template<bool oot_diag, bool fuse_rhs>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
     ll_step(const int n, T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
-            const int piv_stride, const int k, int& oob_count, T* TDLS_RESTRICT y = nullptr,
+            const int piv_stride, const int k, int& oot_count, T* TDLS_RESTRICT y = nullptr,
             const int rhs_stride = 1) {
         const int k0 = k * TS;
         const int nt = num_tiles(n);
@@ -815,8 +816,8 @@ struct TiledLuSolverDynamic {
         load_tile_piv(n, A, A_stride, piv, piv_stride, k0, k0, tile, ke, ke);
         ll_correct_tile(n, A, A_stride, piv, piv_stride, k0, k0, k0, tile, ke, ke);
 
-        if (!factor_diag_tile<oob_diag, fuse_rhs>(n, A, A_stride, piv, piv_stride, k0, tile,
-                                                  oob_count, ke, y, rhs_stride))
+        if (!factor_diag_tile<oot_diag, fuse_rhs>(n, A, A_stride, piv, piv_stride, k0, tile,
+                                                  oot_count, ke, y, rhs_stride))
             return false;
 
         store_tile_piv(n, A, A_stride, piv, piv_stride, k0, k0, tile, ke, ke);
@@ -851,7 +852,7 @@ struct TiledLuSolverDynamic {
     /// A becomes L\\U (unit lower L below the diagonal, U above including
     /// it, the diagonal holding the pivot RECIPROCALS), under logical row
     /// permutation piv (piv[i] = physical row holding logical row i).
-    /// \tparam oob_diag when false, the out-of-block diagnostics are
+    /// \tparam oot_diag when false, the out-of-tile diagnostics are
     ///         compiled out entirely - use the overload without the
     ///         out-parameter
     /// \tparam fuse_rhs internal hook of solve_fused: folds the forward
@@ -861,18 +862,18 @@ struct TiledLuSolverDynamic {
     /// \param[in]     A_stride   element stride of A
     /// \param[out]    piv        permutation storage (always caller-provided)
     /// \param[in]     piv_stride element stride of piv
-    /// \param[out]    oob_count  number of columns that needed the
-    ///                out-of-block pivot search
+    /// \param[out]    oot_count  number of columns that needed the
+    ///                out-of-tile pivot search
     /// \param[in,out] y          fused right-hand side (fuse_rhs only)
     /// \param[in]     rhs_stride element stride of y
     /// \return false on a singular matrix.
-    template<bool oob_diag = true, bool fuse_rhs = false>
+    template<bool oot_diag = true, bool fuse_rhs = false>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
     factorize(const int n, T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
-              const int piv_stride, int& oob_count, T* TDLS_RESTRICT y = nullptr,
+              const int piv_stride, int& oot_count, T* TDLS_RESTRICT y = nullptr,
               const int rhs_stride = 1) {
 
-        if constexpr (oob_diag) oob_count = 0;
+        if constexpr (oot_diag) oot_count = 0;
 
         for (int i = 0; i < n; ++i)
             TDLS_DYN_PIV(i) = i;
@@ -880,11 +881,11 @@ struct TiledLuSolverDynamic {
         const int nt = num_tiles(n);
         for (int k = 0; k < nt; ++k) {
             if constexpr (Sched == TiledLuSchedule::RightLooking) {
-                if (!rl_step<oob_diag, fuse_rhs>(n, A, A_stride, piv, piv_stride, k, oob_count, y,
+                if (!rl_step<oot_diag, fuse_rhs>(n, A, A_stride, piv, piv_stride, k, oot_count, y,
                                                  rhs_stride))
                     return false;
             } else {
-                if (!ll_step<oob_diag, fuse_rhs>(n, A, A_stride, piv, piv_stride, k, oob_count, y,
+                if (!ll_step<oot_diag, fuse_rhs>(n, A, A_stride, piv, piv_stride, k, oot_count, y,
                                                  rhs_stride))
                     return false;
             }
@@ -893,7 +894,7 @@ struct TiledLuSolverDynamic {
         return true;
     }
 
-    /// \brief Diagnostics-free factorize overload: no out-of-block
+    /// \brief Diagnostics-free factorize overload: no out-of-tile
     /// out-parameter at all.
     /// \param[in]     n          system dimension (n >= 2)
     /// \param[in,out] A          matrix, pre-offset by the caller
@@ -1239,7 +1240,7 @@ struct TiledLuSolverDynamic {
        ===================================================================== */
 
     /// \brief factorize + substitute in one call.
-    /// \tparam oob_diag compile the out-of-block counter in or out
+    /// \tparam oot_diag compile the out-of-tile counter in or out
     /// \param[in]     n          system dimension (n >= 2)
     /// \param[in,out] A          on entry the matrix (pre-offset by the
     ///                caller), on exit its factorization (usable for
@@ -1250,20 +1251,20 @@ struct TiledLuSolverDynamic {
     /// \param[in]     b          right-hand side, in original order
     /// \param[out]    x          solution
     /// \param[in]     rhs_stride element stride of b and x
-    /// \param[out]    oob_count  number of columns that needed the
-    ///                out-of-block pivot search
+    /// \param[out]    oot_count  number of columns that needed the
+    ///                out-of-tile pivot search
     /// \return false on a singular matrix.
-    template<bool oob_diag = true>
+    template<bool oot_diag = true>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
     solve(const int n, T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
           const int piv_stride, const T* TDLS_RESTRICT b, T* TDLS_RESTRICT x, const int rhs_stride,
-          int& oob_count) {
-        if (!factorize<oob_diag>(n, A, A_stride, piv, piv_stride, oob_count)) return false;
+          int& oot_count) {
+        if (!factorize<oot_diag>(n, A, A_stride, piv, piv_stride, oot_count)) return false;
         substitute(n, A, A_stride, piv, piv_stride, b, x, rhs_stride);
         return true;
     }
 
-    /// \brief Diagnostics-free solve overload: no out-of-block
+    /// \brief Diagnostics-free solve overload: no out-of-tile
     /// out-parameter at all.
     /// \param[in]     n          system dimension (n >= 2)
     /// \param[in,out] A          on entry the matrix (pre-offset by the
@@ -1293,7 +1294,7 @@ struct TiledLuSolverDynamic {
     /// rows through pivoting (swap hook in factor_diag_column), which
     /// makes the result bitwise-identical to factorize +
     /// substitute_inplace.
-    /// \tparam oob_diag compile the out-of-block counter in or out
+    /// \tparam oot_diag compile the out-of-tile counter in or out
     /// \param[in]     n          system dimension (n >= 2)
     /// \param[in,out] A          on entry the matrix (pre-offset by the
     ///                caller), on exit its factorization
@@ -1302,14 +1303,14 @@ struct TiledLuSolverDynamic {
     /// \param[in]     piv_stride element stride of piv
     /// \param[in,out] y          right-hand side on entry, solution on exit
     /// \param[in]     rhs_stride element stride of y
-    /// \param[out]    oob_count  number of columns that needed the
-    ///                out-of-block pivot search
+    /// \param[out]    oot_count  number of columns that needed the
+    ///                out-of-tile pivot search
     /// \return false on a singular matrix (y left partially updated).
-    template<bool oob_diag = true>
+    template<bool oot_diag = true>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
     solve_fused(const int n, T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
-                const int piv_stride, T* TDLS_RESTRICT y, const int rhs_stride, int& oob_count) {
-        if (!factorize<oob_diag, true>(n, A, A_stride, piv, piv_stride, oob_count, y, rhs_stride))
+                const int piv_stride, T* TDLS_RESTRICT y, const int rhs_stride, int& oot_count) {
+        if (!factorize<oot_diag, true>(n, A, A_stride, piv, piv_stride, oot_count, y, rhs_stride))
             return false;
 
         // Backward pass only - the forward one happened inside factorize.
@@ -1317,7 +1318,7 @@ struct TiledLuSolverDynamic {
         return true;
     }
 
-    /// \brief Diagnostics-free solve_fused overload: no out-of-block
+    /// \brief Diagnostics-free solve_fused overload: no out-of-tile
     /// out-parameter at all.
     /// \param[in]     n          system dimension (n >= 2)
     /// \param[in,out] A          on entry the matrix (pre-offset by the
