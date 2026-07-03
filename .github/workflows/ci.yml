@@ -1,0 +1,57 @@
+# Builds the library, runs the test suites and the examples, and gates
+# the formatting, the documentation and the consumability of the
+# project on every push and pull request. GitHub-hosted runners have no
+# GPU, so no CUDA or HIP toolchain is installed and the GPU examples
+# are simply not configured; they run on machines that have a device.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: tests (${{ matrix.compiler }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [g++, clang++]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the LLVM OpenMP runtime
+        run: sudo apt-get update && sudo apt-get install -y libomp-dev
+      - name: Configure
+        run: >
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
+      - name: Build
+        run: cmake --build build -j4
+      - name: Run the test suites and the examples
+        run: ctest --test-dir build --output-on-failure
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang-format
+        run: pip install "clang-format==22.*"
+      - name: Check the formatting
+        run: git ls-files '*.hpp' '*.cpp' '*.cu' | xargs clang-format --dry-run --Werror
+
+  doxygen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install graphviz and doxygen
+        run: |
+          sudo apt-get update && sudo apt-get install -y graphviz
+          curl -sL https://github.com/doxygen/doxygen/releases/download/Release_1_12_0/doxygen-1.12.0.linux.bin.tar.gz | tar xz
+      - name: Build the API reference and fail on any warning
+        working-directory: docs
+        run: |
+          mkdir -p _build
+          ../doxygen-1.12.0/bin/doxygen Doxyfile 2> warnings.txt
+          if [ -s warnings.txt ]; then cat warnings.txt; exit 1; fi
