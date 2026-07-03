@@ -18,15 +18,34 @@ takes the dimension at run time; the placement of the operands is
 expressed through element strides.
 
 ```cpp
+#include <limits>
+
 #include <tdls/tdls.hpp>
+
+// Solver configuration, shared by both variants, every knob spelled out.
+// tdls::TiledLUppDefaultConfig<T> provides ready-made defaults.
+struct Config {
+    // Size of the tiles used for the LU factorization
+    static constexpr int tile_size = 3;
+    // Elimination schedule, RightLooking or LeftLooking
+    static constexpr tdls::TiledLUppSchedule sched = tdls::TiledLUppSchedule::RightLooking;
+    // A pivot at least this large is accepted without searching outside the tile
+    static constexpr double oot_threshold = 1e-10;
+    // The factorization is declared singular when the best pivot falls below this floor
+    static constexpr double singular_eps = std::numeric_limits<double>::min();
+    // The out-of-tile search stops at the first acceptable pivot
+    static constexpr bool oot_first_acceptable = true;
+    // Forced unrolling of the in-tile loops
+    static constexpr bool unroll_inner = true;
+};
 
 // LU solver for systems of dimension 9: the 9 x 9 matrix is cut
 // into 3 x 3 register tiles. One call: factorize M in place, then
-// overwrite y with the solution. The residency booleans
-// declare every operand caller-local, so the stride arguments (the
-// 1s) are ignored at compile time; with external operands they carry
-// the element stride of each array.
-using Solver = tdls::TiledLUppSolverStatic<double, 9, tdls::TiledLUppConfig<double, 3>>;
+// overwrite y with the solution. The residency booleans declare
+// every operand caller-local, so the stride arguments (the 1s) are
+// ignored at compile time; with external operands they carry the
+// element stride of each array.
+using Solver = tdls::TiledLUppSolverStatic<double, 9, Config>;
 Solver::solve_inplace<true, true, true>(M, 1, piv, 1, y, 1);
 ```
 

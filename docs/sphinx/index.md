@@ -35,9 +35,9 @@ A taste of the interface:
 struct Config {
     // Size of the tiles used for the LU factorization
     static constexpr int tile_size = 3;
-    // Elimination schedule, RightLooking or LeftLooking.
+    // Elimination schedule, RightLooking or LeftLooking
     static constexpr tdls::TiledLUppSchedule sched = tdls::TiledLUppSchedule::RightLooking;
-    // A pivot at least this large is accepted without searching outside the tile.
+    // A pivot at least this large is accepted without searching outside the tile
     static constexpr double oot_threshold = 1e-10;
     // The factorization is declared singular when the best pivot falls below this floor
     static constexpr double singular_eps = std::numeric_limits<double>::min();
