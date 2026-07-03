@@ -32,15 +32,15 @@ namespace {
 /// \tparam T     scalar type
 /// \tparam N     system dimension
 /// \tparam TS    tile size
-/// \tparam Sched elimination schedule
+/// \tparam Schedule elimination schedule
 /// \param[in] count     number of systems
 /// \param[in] bound     half-width of the entry distribution
 /// \param[in] tolerance backward-error bound
 /// \param[in] seed      generator seed
-template<typename T, int N, int TS, tdls::TiledLUppSchedule Sched>
+template<typename T, int N, int TS, tdls::TiledLUppSchedule Schedule>
 void anchor_case(const int count, const double bound, const double tolerance,
                  const std::uint64_t seed) {
-    using Solver = tdls::TiledLUppSolverStatic<T, N, tdls::TiledLUppConfig<T, TS, Sched>>;
+    using Solver = tdls::TiledLUppSolverStatic<T, N, tdls::TiledLUppConfig<T, TS, Schedule>>;
     auto batch   = tdls_tests::make_batch<T>(N, count, seed, bound);
     tdls_tests::zero_column(batch, 0, 0);
 

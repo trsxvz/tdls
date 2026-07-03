@@ -29,13 +29,13 @@ namespace {
 /// \tparam T     scalar type
 /// \tparam N     system dimension
 /// \tparam TS    tile size
-/// \tparam Sched elimination schedule
+/// \tparam Schedule elimination schedule
 /// \param[in] count number of systems
 /// \param[in] bound half-width of the entry distribution
 /// \param[in] seed  generator seed
-template<typename T, int N, int TS, tdls::TiledLUppSchedule Sched>
+template<typename T, int N, int TS, tdls::TiledLUppSchedule Schedule>
 void bridge_case(const int count, const double bound, const std::uint64_t seed) {
-    using Config  = tdls::TiledLUppConfig<T, TS, Sched>;
+    using Config  = tdls::TiledLUppConfig<T, TS, Schedule>;
     using Static  = tdls::TiledLUppSolverStatic<T, N, Config>;
     using Dynamic = tdls::TiledLUppSolverDynamic<T, Config>;
     auto batch    = tdls_tests::make_batch<T>(N, count, seed, bound);

@@ -95,12 +95,13 @@ struct TiledLUppDefaultConfig {
 /// \brief Convenience configuration selecting the tile size and the
 /// schedule while keeping every other knob at its default.
 /// \tparam T     scalar type (float or double)
-/// \tparam TS    tile extent
-/// \tparam Sched elimination schedule
-template<typename T, int TS, TiledLUppSchedule Sched = TiledLUppSchedule::RightLooking>
+/// \tparam TS    tile size (int)
+/// \tparam Schedule elimination schedule (RightLooking or LeftLooking)
+template<typename T, int TS, TiledLUppSchedule Schedule = TiledLUppSchedule::RightLooking>
 struct TiledLUppConfig : TiledLUppDefaultConfig<T> {
-    static constexpr int tile_size              = TS;    ///< tile extent
-    static constexpr TiledLUppSchedule schedule = Sched; ///< elimination schedule
+    static constexpr int tile_size = TS; ///< tile size (int)
+    static constexpr TiledLUppSchedule schedule =
+        Schedule; ///< elimination schedule (RightLooking or LeftLooking)
 };
 
 

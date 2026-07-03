@@ -26,17 +26,17 @@ namespace {
 /// \tparam T   scalar type
 /// \tparam N   system dimension
 /// \tparam TS  tile size
-/// \tparam Sched elimination schedule
+/// \tparam Schedule elimination schedule
 /// \tparam internal_rhs    residency of the right-hand side under test
 /// \tparam internal_piv    residency of the pivot under test
 /// \tparam internal_matrix residency of the matrix under test
 /// \param[in] batch input systems
-template<typename T, int N, int TS, tdls::TiledLUppSchedule Sched, bool internal_rhs,
+template<typename T, int N, int TS, tdls::TiledLUppSchedule Schedule, bool internal_rhs,
          bool internal_piv, bool internal_matrix>
 void compare_to_baseline(const tdls_tests::SystemBatch<T>& batch) {
-    using Baseline = tdls_tests::ResidencyRunner<T, N, TS, Sched, false, false, false>;
-    using Tested =
-        tdls_tests::ResidencyRunner<T, N, TS, Sched, internal_rhs, internal_piv, internal_matrix>;
+    using Baseline = tdls_tests::ResidencyRunner<T, N, TS, Schedule, false, false, false>;
+    using Tested   = tdls_tests::ResidencyRunner<T, N, TS, Schedule, internal_rhs, internal_piv,
+                                                 internal_matrix>;
 
     std::vector<T> A_ref(N * N), A_tst(N * N), x_ref(N), x_tst(N);
     int piv_ref[N], piv_tst[N];
@@ -61,20 +61,20 @@ void compare_to_baseline(const tdls_tests::SystemBatch<T>& batch) {
 /// \tparam T     scalar type
 /// \tparam N     system dimension
 /// \tparam TS    tile size
-/// \tparam Sched elimination schedule
+/// \tparam Schedule elimination schedule
 /// \param[in] count number of systems
 /// \param[in] bound half-width of the entry distribution
 /// \param[in] seed  generator seed
-template<typename T, int N, int TS, tdls::TiledLUppSchedule Sched>
+template<typename T, int N, int TS, tdls::TiledLUppSchedule Schedule>
 void all_combos_case(const int count, const double bound, const std::uint64_t seed) {
     const auto batch = tdls_tests::make_batch<T>(N, count, seed, bound);
-    compare_to_baseline<T, N, TS, Sched, false, false, true>(batch);
-    compare_to_baseline<T, N, TS, Sched, false, true, false>(batch);
-    compare_to_baseline<T, N, TS, Sched, false, true, true>(batch);
-    compare_to_baseline<T, N, TS, Sched, true, false, false>(batch);
-    compare_to_baseline<T, N, TS, Sched, true, false, true>(batch);
-    compare_to_baseline<T, N, TS, Sched, true, true, false>(batch);
-    compare_to_baseline<T, N, TS, Sched, true, true, true>(batch);
+    compare_to_baseline<T, N, TS, Schedule, false, false, true>(batch);
+    compare_to_baseline<T, N, TS, Schedule, false, true, false>(batch);
+    compare_to_baseline<T, N, TS, Schedule, false, true, true>(batch);
+    compare_to_baseline<T, N, TS, Schedule, true, false, false>(batch);
+    compare_to_baseline<T, N, TS, Schedule, true, false, true>(batch);
+    compare_to_baseline<T, N, TS, Schedule, true, true, false>(batch);
+    compare_to_baseline<T, N, TS, Schedule, true, true, true>(batch);
 }
 
 } // namespace

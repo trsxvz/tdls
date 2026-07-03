@@ -6,7 +6,7 @@ They are organized as two scientific problems, each declined at every
 execution scale, so that moving from one column to the next changes
 only the parallel harness, never the solver calls.
 
-| | Sequential | OpenMP | GPU, thread-local | GPU, device memory SoA |
+| | CPU, sequential | CPU, parallel | GPU, thread-local memory | GPU, global device memory |
 |---|---|---|---|---|
 | **Compile-time dimension** (stiff chemistry, Radau IIA, N = 9) | `implicit_ode` | `implicit_ode_batch_omp` | `implicit_ode_batch_gpu` | `implicit_ode_batch_gpu_soa` |
 | **Runtime dimension** (Love integral equation, Nystroem, n chosen at launch) | `integral_equation` | `integral_equation_batch_omp` | `integral_equation_batch_gpu` | `integral_equation_batch_gpu_soa` |

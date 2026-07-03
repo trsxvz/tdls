@@ -1,10 +1,10 @@
-# Sphinx configuration of the tdls documentation site. The pages are
+# Sphinx configuration of the TDLS documentation site. The pages are
 # written in Markdown (MyST); the Doxygen API reference is built
 # separately (docs/Doxyfile) and attached under api/ at deployment.
 import re
 from pathlib import Path
 
-project = "tdls"
+project = "TDLS"
 author = "Tristan Chenaille"
 
 # The version is read from the library header so it cannot drift.
@@ -16,6 +16,6 @@ extensions = ["myst_parser"]
 myst_enable_extensions = ["colon_fence"]
 
 html_theme = "sphinx_rtd_theme"
-html_title = "tdls"
+html_title = "TDLS"
 html_show_copyright = False
 html_show_sphinx = True

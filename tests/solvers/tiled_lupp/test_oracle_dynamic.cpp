@@ -28,16 +28,16 @@ namespace {
 /// report on each side, and both backward errors under the tolerance.
 /// \tparam T     scalar type
 /// \tparam TS    tile size
-/// \tparam Sched elimination schedule
+/// \tparam Schedule elimination schedule
 /// \param[in] n         system dimension (runtime)
 /// \param[in] count     number of systems
 /// \param[in] bound     half-width of the entry distribution
 /// \param[in] tolerance backward-error bound
 /// \param[in] seed      generator seed
-template<typename T, int TS, tdls::TiledLUppSchedule Sched>
+template<typename T, int TS, tdls::TiledLUppSchedule Schedule>
 void anchor_case(const int n, const int count, const double bound, const double tolerance,
                  const std::uint64_t seed) {
-    using Solver = tdls::TiledLUppSolverDynamic<T, tdls::TiledLUppConfig<T, TS, Sched>>;
+    using Solver = tdls::TiledLUppSolverDynamic<T, tdls::TiledLUppConfig<T, TS, Schedule>>;
     auto batch   = tdls_tests::make_batch<T>(n, count, seed, bound);
     tdls_tests::zero_column(batch, 0, 0);
 

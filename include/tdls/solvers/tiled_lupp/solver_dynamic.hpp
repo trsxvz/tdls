@@ -110,9 +110,9 @@ namespace tdls {
 template<typename T, typename TiledLUppSolverConfig = TiledLUppDefaultConfig<T>>
 struct TiledLUppSolverDynamic {
 
-    static constexpr int TS = TiledLUppSolverConfig::tile_size; ///< tile extent
-    static constexpr TiledLUppSchedule Sched =
-        TiledLUppSolverConfig::schedule; ///< elimination schedule
+    static constexpr int TS = TiledLUppSolverConfig::tile_size; ///< tile size (int)
+    static constexpr TiledLUppSchedule Schedule =
+        TiledLUppSolverConfig::schedule; ///< elimination schedule (RightLooking or LeftLooking)
 
     static_assert(TiledLUppSolverConfig::singular_eps <= TiledLUppSolverConfig::oot_threshold,
                   "TiledLUppSolverDynamic: singular_eps must not exceed oot_threshold (the "
@@ -433,7 +433,7 @@ struct TiledLUppSolverDynamic {
                 const int phys = TDLS_LUPP_DYN_PIV(row);
 
                 T corrected = TDLS_LUPP_DYN_A(phys, gc);
-                if constexpr (Sched == TiledLUppSchedule::LeftLooking) {
+                if constexpr (Schedule == TiledLUppSchedule::LeftLooking) {
                     for (int bj0 = 0; bj0 < k0; bj0 += TS)
                         for (int p = 0; p < TS; ++p)
                             corrected -= TDLS_LUPP_DYN_A(phys, bj0 + p) *
@@ -444,7 +444,7 @@ struct TiledLUppSolverDynamic {
                     T L_row[TS];
                     for (int t = 0; t < c; ++t) {
                         T a_t = TDLS_LUPP_DYN_A(phys, k0 + t);
-                        if constexpr (Sched == TiledLUppSchedule::LeftLooking) {
+                        if constexpr (Schedule == TiledLUppSchedule::LeftLooking) {
                             for (int bj0 = 0; bj0 < k0; bj0 += TS)
                                 for (int p = 0; p < TS; ++p)
                                     a_t -= TDLS_LUPP_DYN_A(phys, bj0 + p) *
@@ -497,7 +497,7 @@ struct TiledLUppSolverDynamic {
                 const int phys = TDLS_LUPP_DYN_PIV(gc);
                 for (int j = 0; j < ke; ++j) {
                     tile[c * TS + j] = TDLS_LUPP_DYN_A(phys, k0 + j);
-                    if constexpr (Sched == TiledLUppSchedule::LeftLooking) {
+                    if constexpr (Schedule == TiledLUppSchedule::LeftLooking) {
                         for (int bj0 = 0; bj0 < k0; bj0 += TS)
                             for (int p = 0; p < TS; ++p)
                                 tile[c * TS + j] -=
@@ -907,7 +907,7 @@ struct TiledLUppSolverDynamic {
 
         const int nt = num_tiles(n);
         for (int k = 0; k < nt; ++k) {
-            if constexpr (Sched == TiledLUppSchedule::RightLooking) {
+            if constexpr (Schedule == TiledLUppSchedule::RightLooking) {
                 if (!rl_step<oot_diag, fuse_rhs>(n, A, A_stride, piv, piv_stride, k, oot_count, y,
                                                  rhs_stride))
                     return false;

@@ -24,8 +24,8 @@
 namespace {
 
 /// \brief Configuration flipping only unroll_inner.
-template<typename T, int TS, tdls::TiledLUppSchedule Sched>
-struct NoUnrollConfig : tdls::TiledLUppConfig<T, TS, Sched> {
+template<typename T, int TS, tdls::TiledLUppSchedule Schedule>
+struct NoUnrollConfig : tdls::TiledLUppConfig<T, TS, Schedule> {
     static constexpr bool unroll_inner = false;
 };
 
@@ -57,14 +57,14 @@ struct StrictEpsConfig : tdls::TiledLUppConfig<T, TS> {
 /// \tparam T     scalar type
 /// \tparam N     system dimension
 /// \tparam TS    tile size
-/// \tparam Sched elimination schedule
+/// \tparam Schedule elimination schedule
 /// \param[in] count number of systems
 /// \param[in] bound half-width of the entry distribution
 /// \param[in] seed  generator seed
-template<typename T, int N, int TS, tdls::TiledLUppSchedule Sched>
+template<typename T, int N, int TS, tdls::TiledLUppSchedule Schedule>
 void unroll_case(const int count, const double bound, const std::uint64_t seed) {
-    using Default    = tdls::TiledLUppSolverStatic<T, N, tdls::TiledLUppConfig<T, TS, Sched>>;
-    using NoUnroll   = tdls::TiledLUppSolverStatic<T, N, NoUnrollConfig<T, TS, Sched>>;
+    using Default    = tdls::TiledLUppSolverStatic<T, N, tdls::TiledLUppConfig<T, TS, Schedule>>;
+    using NoUnroll   = tdls::TiledLUppSolverStatic<T, N, NoUnrollConfig<T, TS, Schedule>>;
     const auto batch = tdls_tests::make_batch<T>(N, count, seed, bound);
 
     std::vector<T> A_def(N * N), A_alt(N * N), x_def(N), x_alt(N);

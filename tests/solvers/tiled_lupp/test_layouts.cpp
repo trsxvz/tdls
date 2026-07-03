@@ -134,9 +134,9 @@ void layouts_case(const int count, const double bound, const std::uint64_t seed)
 }
 
 /// \brief Static-solver front end of layouts_case.
-template<typename T, int N, int TS, tdls::TiledLUppSchedule Sched>
+template<typename T, int N, int TS, tdls::TiledLUppSchedule Schedule>
 void layouts_case_static(const int count, const double bound, const std::uint64_t seed) {
-    using Solver = tdls::TiledLUppSolverStatic<T, N, tdls::TiledLUppConfig<T, TS, Sched>>;
+    using Solver = tdls::TiledLUppSolverStatic<T, N, tdls::TiledLUppConfig<T, TS, Schedule>>;
     layouts_case<Solver, T, N>(count, bound, seed);
 }
 

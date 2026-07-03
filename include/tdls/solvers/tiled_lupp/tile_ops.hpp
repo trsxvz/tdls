@@ -43,7 +43,7 @@ namespace tdls {
 
 /// \brief TSxTS register-tile micro-kernels.
 /// \tparam T            scalar type
-/// \tparam TS           tile extent (row stride of the register tiles)
+/// \tparam TS           tile size (int, row stride of the register tiles)
 /// \tparam unroll_inner unroll knob, forwarded from the TiledLUpp solver configuration
 template<typename T, int TS, bool unroll_inner>
 struct TiledLUppTileOps {

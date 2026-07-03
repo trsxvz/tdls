@@ -2,12 +2,13 @@
 
 ## Requirements
 
-A C++17 compiler. Nothing else: the library has no dependency and is
-tested against g++, clang++, nvcc and hipcc.
+Only a C++17 compiler is mandatory: the library itself has no
+dependency. Running every example additionally needs an OpenMP
+runtime and a CUDA or HIP toolchain.
 
 ## Consuming the library
 
-tdls is header-only and has no installation step. Either copy the
+TDLS is header-only and has no installation step. Either copy the
 `include/` directory into a project and add it to the include path, or
 use CMake:
 
@@ -28,7 +29,7 @@ Finer-grained headers exist for the individual pieces
 
 ## Building the tests and examples
 
-Both are ordinary CMake targets, enabled by default when tdls is the
+Both are ordinary CMake targets, enabled by default when TDLS is the
 top-level project and disabled when it is consumed through
 `add_subdirectory` (options `TDLS_BUILD_TESTS` and
 `TDLS_BUILD_EXAMPLES`):
