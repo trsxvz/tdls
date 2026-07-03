@@ -23,20 +23,39 @@ This covers the three batch layouts alike: AoS (contiguous storage,
 stride 1), SoA (stride = batch size) and AoSoA (tiled hybrid); the SoA
 and AoSoA layouts both provide memory coalescence.
 
-A taste of the interface, from the examples:
+A taste of the interface:
 
 ```cpp
+#include <limits>
+
 #include <tdls/tdls.hpp>
 
+// Solver configuration, shared by both variants, every knob spelled out.
+// tdls::TiledLUppDefaultConfig<T> provides ready-made defaults.
+struct Config {
+    // Size of the tiles used for the LU factorization
+    static constexpr int tile_size = 3;
+    // Elimination schedule, RightLooking or LeftLooking.
+    static constexpr tdls::TiledLUppSchedule sched = tdls::TiledLUppSchedule::RightLooking;
+    // A pivot at least this large is accepted without searching outside the tile.
+    static constexpr double oot_threshold = 1e-10;
+    // The factorization is declared singular when the best pivot falls below this floor
+    static constexpr double singular_eps = std::numeric_limits<double>::min();
+    // The out-of-tile search stops at the first acceptable pivot
+    static constexpr bool oot_first_acceptable = true;
+    // Forced unrolling of the in-tile loops
+    static constexpr bool unroll_inner = true;
+};
+
 // LUpp solver with compile-time matrix size.
-using StaticSolver  = tdls::TiledLUppSolverStatic<double, 9, tdls::TiledLUppConfig<double, 3>>;
+using StaticSolver  = tdls::TiledLUppSolverStatic<double, 9, Config>;
 // LUpp solver with runtime matrix size.
-using DynamicSolver = tdls::TiledLUppSolverDynamic<double>;
+using DynamicSolver = tdls::TiledLUppSolverDynamic<double, Config>;
 
 // Both variants offer two interfaces:
 // - split: factorize once, then one substitute call per right-hand
 //   side, reusing the factorization;
-// - one-call: solve chains factorize and substitute.
+// - one-call: solve (two buffers) or solve_inplace (single buffer).
 
 // Static variant, split interface, contiguous storage (stride 1).
 // substitute reads b and writes x; substitute_inplace overwrites its
@@ -46,9 +65,13 @@ StaticSolver::substitute<true, true, true>(M, 1, piv, 1, b, x, 1);
 StaticSolver::substitute_inplace<true, true, true>(M, 1, piv, 1, y, 1);
 
 // Runtime variant, one-call interface, on a structure-of-arrays batch
-// of B interleaved systems: element k of the system number s sits at
-// A[k * B + s]. Every pointer is offset by s, every stride is B.
-DynamicSolver::solve(n, A + s, B, piv + s, B, b + s, x + s, B);
+// of interleaved systems: element k of the system number s sits at
+// A[k * stride + s], where the stride is the number of systems. The
+// pivot array stays local to the caller (stride 1): placements can be
+// mixed freely, one stride per operand. solve reads b and writes x;
+// solve_inplace overwrites its single buffer y and folds the forward
+// pass into the factorization.
+DynamicSolver::solve_inplace(matrixSize, A + s, stride, piv, 1, y + s, stride);
 ```
 
 Dense math objects (matrices, vectors, strided views) can also be
@@ -60,6 +83,7 @@ external library; see {doc}`tfel_interoperability`.
 
 getting_started
 examples
+tests
 tfel_interoperability
 api_reference
 ```

@@ -50,7 +50,9 @@ struct TiledLUppDefaultConfig {
     /// TiledLUppSchedule.
     static constexpr TiledLUppSchedule schedule = TiledLUppSchedule::RightLooking;
 
-    /// Acceptable-pivot threshold of the out-of-tile search. An in-tile
+    /// Acceptable-pivot threshold of the out-of-tile search. Both
+    /// thresholds must have the scalar type T; the solvers enforce this
+    /// contract at compile time. An in-tile
     /// pivot candidate whose magnitude reaches this value is accepted
     /// without looking outside the tile; below it, the search extends to
     /// the rows under the tile (out-of-tile pivoting) and the best

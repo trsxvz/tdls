@@ -41,6 +41,7 @@
 
 
 #include <cmath>
+#include <type_traits>
 
 #include <tdls/solvers/tiled_lupp/config.hpp>
 
@@ -80,7 +81,7 @@ namespace tdls {
 /// \brief Strided entry i of column w of a multi right-hand-side block.
 #define TDLS_LUPP_DYN_XW(w, i) x[(i) * rhs_stride + (w) * xcol_stride]
 /// \def TDLS_LUPP_DYN_Y
-/// \brief Strided entry i of the fused right-hand side of solve_fused.
+/// \brief Strided entry i of the fused right-hand side of solve_inplace.
 #define TDLS_LUPP_DYN_Y(i) y[(i) * rhs_stride]
 
 
@@ -97,7 +98,7 @@ namespace tdls {
 ///   - substitute_canonical:  idem with b = e_col (tangent-operator columns)
 ///   - substitute_inplace:    idem with b == x (cycle-leader permute)
 ///   - solve:                 factorize + substitute
-///   - solve_fused:           factorize with the forward pass folded in
+///   - solve_inplace:           factorize with the forward pass folded in
 ///
 /// The factored diagonal holds the RECIPROCALS of the U pivots, exactly as
 /// in TiledLUppSolverStatic: a factorization produced here must be consumed by the
@@ -117,6 +118,10 @@ struct TiledLUppSolverDynamic {
     static_assert(TiledLUppSolverConfig::singular_eps <= TiledLUppSolverConfig::oot_threshold,
                   "TiledLUppSolverDynamic: singular_eps must not exceed oot_threshold (the "
                   "floor applies to the out-of-tile recovery path)");
+    static_assert(
+        std::is_same_v<std::remove_cv_t<decltype(TiledLUppSolverConfig::oot_threshold)>, T> &&
+            std::is_same_v<std::remove_cv_t<decltype(TiledLUppSolverConfig::singular_eps)>, T>,
+        "TiledLUppSolverDynamic: the config thresholds must have the scalar type T");
     static_assert(TS >= 2, "TiledLUppSolverDynamic: tile size must be >= 2");
 
     /// \brief Number of tiles per dimension (last one possibly partial).
@@ -616,7 +621,7 @@ struct TiledLUppSolverDynamic {
 
     /// \brief RL: TRSM down + Schur sweep of one row block below the
     /// diagonal, with the optional fused forward-substitution push.
-    /// \tparam fuse_rhs push the fused RHS y along (solve_fused)
+    /// \tparam fuse_rhs push the fused RHS y along (solve_inplace)
     /// \param[in]     n          system dimension
     /// \param[in,out] A          matrix (caller-pre-offset)
     /// \param[in]     A_stride   element stride of A
@@ -669,7 +674,7 @@ struct TiledLUppSolverDynamic {
     /// \brief RL: one full factorization step (diagonal tile + trailing
     /// updates).
     /// \tparam oot_diag compile the out-of-tile counter in or out
-    /// \tparam fuse_rhs apply the step to the fused RHS y (solve_fused)
+    /// \tparam fuse_rhs apply the step to the fused RHS y (solve_inplace)
     /// \param[in]     n          system dimension
     /// \param[in,out] A          matrix (caller-pre-offset)
     /// \param[in]     A_stride   element stride of A
@@ -756,7 +761,7 @@ struct TiledLUppSolverDynamic {
 
     /// \brief LL: correct + TRSM one L-panel tile below the diagonal, with
     /// the optional fused forward-substitution push.
-    /// \tparam fuse_rhs push the fused RHS y along (solve_fused)
+    /// \tparam fuse_rhs push the fused RHS y along (solve_inplace)
     /// \param[in]     n          system dimension
     /// \param[in,out] A          matrix (caller-pre-offset)
     /// \param[in]     A_stride   element stride of A
@@ -819,7 +824,7 @@ struct TiledLUppSolverDynamic {
     /// \brief LL: one full factorization step (correct + factor the
     /// diagonal tile, then its L and U panels).
     /// \tparam oot_diag compile the out-of-tile counter in or out
-    /// \tparam fuse_rhs apply the step to the fused RHS y (solve_fused)
+    /// \tparam fuse_rhs apply the step to the fused RHS y (solve_inplace)
     /// \param[in]     n          system dimension
     /// \param[in,out] A          matrix (caller-pre-offset)
     /// \param[in]     A_stride   element stride of A
@@ -882,7 +887,7 @@ struct TiledLUppSolverDynamic {
     /// \tparam oot_diag when false, the out-of-tile diagnostics are
     ///         compiled out entirely - use the overload without the
     ///         out-parameter
-    /// \tparam fuse_rhs internal hook of solve_fused: folds the forward
+    /// \tparam fuse_rhs internal hook of solve_inplace: folds the forward
     ///         substitution of y into the factorization
     /// \param[in]     n          system dimension (n >= 2)
     /// \param[in,out] A          matrix, pre-offset by the caller
@@ -1085,7 +1090,7 @@ struct TiledLUppSolverDynamic {
         }
     }
 
-    /// \brief Backward pass alone - used by fwd_bwd and by solve_fused
+    /// \brief Backward pass alone - used by fwd_bwd and by solve_inplace
     /// (whose forward pass happens inside the factorization).
     /// \tparam W number of columns processed together
     /// \param[in]     n           system dimension
@@ -1335,8 +1340,8 @@ struct TiledLUppSolverDynamic {
     /// \return false on a singular matrix (y left partially updated).
     template<bool oot_diag = true>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
-    solve_fused(const int n, T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
-                const int piv_stride, T* TDLS_RESTRICT y, const int rhs_stride, int& oot_count) {
+    solve_inplace(const int n, T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
+                  const int piv_stride, T* TDLS_RESTRICT y, const int rhs_stride, int& oot_count) {
         if (!factorize<oot_diag, true>(n, A, A_stride, piv, piv_stride, oot_count, y, rhs_stride))
             return false;
 
@@ -1345,7 +1350,7 @@ struct TiledLUppSolverDynamic {
         return true;
     }
 
-    /// \brief Diagnostics-free solve_fused overload: no out-of-tile
+    /// \brief Diagnostics-free solve_inplace overload: no out-of-tile
     /// out-parameter at all.
     /// \param[in]     n          system dimension (n >= 2)
     /// \param[in,out] A          on entry the matrix (pre-offset by the
@@ -1357,10 +1362,10 @@ struct TiledLUppSolverDynamic {
     /// \param[in]     rhs_stride element stride of y
     /// \return false on a singular matrix (y left partially updated).
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
-    solve_fused(const int n, T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
-                const int piv_stride, T* TDLS_RESTRICT y, const int rhs_stride) {
+    solve_inplace(const int n, T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
+                  const int piv_stride, T* TDLS_RESTRICT y, const int rhs_stride) {
         int unused = 0;
-        return solve_fused<false>(n, A, A_stride, piv, piv_stride, y, rhs_stride, unused);
+        return solve_inplace<false>(n, A, A_stride, piv, piv_stride, y, rhs_stride, unused);
     }
 };
 

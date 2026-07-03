@@ -106,7 +106,7 @@ namespace tdls {
 /// columns in remote memory. W = 1 collapses to TDLS_LUPP_X exactly.
 #define TDLS_LUPP_XW(w, i) x[internal_rhs ? (w) * N + (i) : (i) * rhs_stride + (w) * xcol_stride]
 /// \def TDLS_LUPP_Y
-/// \brief Entry i of the fused right-hand side of solve_fused (y follows
+/// \brief Entry i of the fused right-hand side of solve_inplace (y follows
 /// the matrix rows through pivoting).
 #define TDLS_LUPP_Y(i) y[internal_rhs ? (i) : (i) * rhs_stride]
 
@@ -124,7 +124,7 @@ namespace tdls {
 ///   - substitute_canonical:  idem with b = e_col (tangent-operator columns)
 ///   - substitute_inplace:    idem with b == x (cycle-decomposition permute)
 ///   - solve:                 factorize + substitute
-///   - solve_fused:           factorize with the forward pass folded in
+///   - solve_inplace:           factorize with the forward pass folded in
 ///
 /// factorize/substitute stay separate so a factorization can be reused
 /// across several right-hand sides. Substitution is schedule-independent:
@@ -152,6 +152,10 @@ struct TiledLUppSolverStatic {
     static_assert(TiledLUppSolverConfig::singular_eps <= TiledLUppSolverConfig::oot_threshold,
                   "TiledLUppSolverStatic: singular_eps must not exceed oot_threshold (the "
                   "floor applies to the out-of-tile recovery path)");
+    static_assert(
+        std::is_same_v<std::remove_cv_t<decltype(TiledLUppSolverConfig::oot_threshold)>, T> &&
+            std::is_same_v<std::remove_cv_t<decltype(TiledLUppSolverConfig::singular_eps)>, T>,
+        "TiledLUppSolverStatic: the config thresholds must have the scalar type T");
     static_assert(TS >= 2 && TS <= N, "TiledLUppSolverStatic: tile size must satisfy 2 <= TS <= N");
 
     static constexpr int F    = N / TS;     ///< full tiles per dimension
@@ -713,7 +717,7 @@ struct TiledLUppSolverStatic {
     /// \tparam IE row extent of the updated block row
     /// \tparam internal_piv residency of piv
     /// \tparam internal_matrix residency of A
-    /// \tparam fuse_rhs     push the fused RHS y along (solve_fused)
+    /// \tparam fuse_rhs     push the fused RHS y along (solve_inplace)
     /// \tparam internal_rhs residency of y
     /// \param[in,out] A          matrix (caller-pre-offset)
     /// \param[in]     A_stride   element stride of A (external mode)
@@ -752,7 +756,7 @@ struct TiledLUppSolverStatic {
 
         // Fused forward substitution: push the solved y_k segment into this
         // row block while its L panel sits in registers (this is the whole
-        // point of solve_fused - the separate forward pass reloads vanish).
+        // point of solve_inplace - the separate forward pass reloads vanish).
         if constexpr (fuse_rhs) {
             if constexpr (TiledLUppSolverConfig::unroll_inner) {
                 TDLS_UNROLL_FORCE
@@ -786,7 +790,7 @@ struct TiledLUppSolverStatic {
     /// \tparam internal_piv residency of piv
     /// \tparam internal_matrix residency of A
     /// \tparam oot_diag     compile the out-of-tile counter in or out
-    /// \tparam fuse_rhs     apply the step to the fused RHS y (solve_fused)
+    /// \tparam fuse_rhs     apply the step to the fused RHS y (solve_inplace)
     /// \tparam internal_rhs residency of y
     /// \param[in,out] A          matrix (caller-pre-offset)
     /// \param[in]     A_stride   element stride of A (external mode)
@@ -905,7 +909,7 @@ struct TiledLUppSolverStatic {
     /// \tparam IE row extent of the updated tile
     /// \tparam internal_piv residency of piv
     /// \tparam internal_matrix residency of A
-    /// \tparam fuse_rhs     push the fused RHS y along (solve_fused)
+    /// \tparam fuse_rhs     push the fused RHS y along (solve_inplace)
     /// \tparam internal_rhs residency of y
     /// \param[in,out] A          matrix (caller-pre-offset)
     /// \param[in]     A_stride   element stride of A (external mode)
@@ -987,7 +991,7 @@ struct TiledLUppSolverStatic {
     /// \tparam internal_piv residency of piv
     /// \tparam internal_matrix residency of A
     /// \tparam oot_diag     compile the out-of-tile counter in or out
-    /// \tparam fuse_rhs     apply the step to the fused RHS y (solve_fused)
+    /// \tparam fuse_rhs     apply the step to the fused RHS y (solve_inplace)
     /// \tparam internal_rhs residency of y
     /// \param[in,out] A          matrix (caller-pre-offset)
     /// \param[in]     A_stride   element stride of A (external mode)
@@ -1076,7 +1080,7 @@ struct TiledLUppSolverStatic {
     /// \param[in]     A_stride   element stride of A (external mode)
     /// \param[out]    piv        permutation storage (always caller-provided)
     /// \param[in]     piv_stride element stride of piv (external mode)
-    /// \tparam fuse_rhs internal hook of solve_fused: folds the forward
+    /// \tparam fuse_rhs internal hook of solve_inplace: folds the forward
     ///         substitution of y into the factorization
     /// \tparam internal_rhs residency of the fused y (meaningful with
     ///         fuse_rhs only)
@@ -1363,7 +1367,7 @@ struct TiledLUppSolverStatic {
         }
     }
 
-    /// \brief Backward pass alone - used by fwd_bwd and by solve_fused
+    /// \brief Backward pass alone - used by fwd_bwd and by solve_inplace
     /// (whose forward pass happens inside the factorization).
     /// \tparam W  number of columns processed together
     /// \tparam internal_rhs residency of x
@@ -1716,8 +1720,8 @@ struct TiledLUppSolverStatic {
     /// \return false on a singular matrix (y left partially updated).
     template<bool internal_rhs, bool internal_piv, bool internal_matrix, bool oot_diag = true>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
-    solve_fused(T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
-                const int piv_stride, T* TDLS_RESTRICT y, const int rhs_stride, int& oot_count) {
+    solve_inplace(T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
+                  const int piv_stride, T* TDLS_RESTRICT y, const int rhs_stride, int& oot_count) {
         if (!factorize<internal_piv, internal_matrix, oot_diag, true, internal_rhs>(
                 A, A_stride, piv, piv_stride, oot_count, y, rhs_stride))
             return false;
@@ -1728,7 +1732,7 @@ struct TiledLUppSolverStatic {
         return true;
     }
 
-    /// \brief Diagnostics-free solve_fused overload: no out-of-tile
+    /// \brief Diagnostics-free solve_inplace overload: no out-of-tile
     /// out-parameter at all.
     /// \tparam internal_rhs residency of y
     /// \tparam internal_piv residency of piv
@@ -1743,10 +1747,10 @@ struct TiledLUppSolverStatic {
     /// \return false on a singular matrix (y left partially updated).
     template<bool internal_rhs, bool internal_piv, bool internal_matrix>
     TDLS_HOST_DEVICE TDLS_FORCEINLINE static bool
-    solve_fused(T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
-                const int piv_stride, T* TDLS_RESTRICT y, const int rhs_stride) {
+    solve_inplace(T* TDLS_RESTRICT A, const int A_stride, int* TDLS_RESTRICT piv,
+                  const int piv_stride, T* TDLS_RESTRICT y, const int rhs_stride) {
         int unused = 0;
-        return solve_fused<internal_rhs, internal_piv, internal_matrix, false>(
+        return solve_inplace<internal_rhs, internal_piv, internal_matrix, false>(
             A, A_stride, piv, piv_stride, y, rhs_stride, unused);
     }
 
@@ -1754,7 +1758,7 @@ struct TiledLUppSolverStatic {
        Note on pivot ownership: the pivot storage is ALWAYS caller-provided
        (internal array or remote scratch), for every entry point - one
        uniform calling convention. A solver-internal pivot would only be
-       expressible for the single combination {solve/solve_fused x internal
+       expressible for the single combination {solve/solve_inplace x internal
        pivot}; externalizing it there costs nothing (the caller's int
        piv[N] inlines to the exact same codegen), so no special case is
        kept. For one-shot solves the contents are simply treated as

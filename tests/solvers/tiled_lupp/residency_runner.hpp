@@ -35,7 +35,7 @@ namespace tdls_tests {
 enum class SolvePath {
     combined, ///< solve()
     split,    ///< factorize() then substitute()
-    fused     ///< solve_fused()
+    fused     ///< solve_inplace()
 };
 
 /// \brief Runs one entry path of the static TiledLUpp solver under one residency
@@ -146,7 +146,7 @@ struct ResidencyRunner {
                     A, A_stride, piv, piv_stride, b, x, rhs_stride);
             break;
         case SolvePath::fused:
-            ok = Solver::template solve_fused<internal_rhs, internal_piv, internal_matrix>(
+            ok = Solver::template solve_inplace<internal_rhs, internal_piv, internal_matrix>(
                 A, A_stride, piv, piv_stride, x, rhs_stride, oot);
             break;
         }

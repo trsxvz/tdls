@@ -238,9 +238,9 @@ TDLS_TEST_CASE("tiledlupp/adaptors/substitution-entry-points-reproduce-raw") {
         z.v[i]   = b.v[i];
         z_raw[i] = b_raw[i];
     }
-    const bool ok_fused = tdls::solve_fused(A2, piv, z);
+    const bool ok_fused = tdls::solve_inplace(A2, piv, z);
     const bool ok_fused_raw =
-        RawSolver::solve_fused<true, true, true>(A2_raw, 1, piv_raw, 1, z_raw, 1);
+        RawSolver::solve_inplace<true, true, true>(A2_raw, 1, piv_raw, 1, z_raw, 1);
     TDLS_CHECK(ok_fused == ok_fused_raw);
     TDLS_CHECK_BITWISE(z.v, z_raw, static_cast<std::size_t>(N));
 }

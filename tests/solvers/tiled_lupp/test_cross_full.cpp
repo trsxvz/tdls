@@ -5,7 +5,7 @@
 /// The other bridge suites cover each axis against a baseline; this one
 /// guards against higher-order interactions by running the FULL cross
 /// product of the residency combinations (8), the entry paths (solve,
-/// factorize + substitute, solve_fused) and both schedules, on the two
+/// factorize + substitute, solve_inplace) and both schedules, on the two
 /// most structurally rich shapes: the nominal divisible grid (N = 12,
 /// TS = 3) and a trailing-tile grid (N = 13, TS = 6). Every variant must
 /// reproduce the fully external combined baseline bitwise.

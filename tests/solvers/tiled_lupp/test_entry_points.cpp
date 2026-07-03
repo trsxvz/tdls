@@ -4,7 +4,7 @@
 ///
 /// The equivalences documented by the TiledLUpp solvers are checked bitwise on
 /// identical inputs: solve() against factorize() + substitute(),
-/// solve_fused() against factorize() + substitute_inplace(),
+/// solve_inplace() against factorize() + substitute_inplace(),
 /// substitute_canonical() against substitute_canonical_block<1>(), a
 /// block of canonical columns against the same columns solved one by
 /// one, the reuse of one factorization across several right-hand sides,
@@ -66,7 +66,7 @@ void entry_points_case(const int count, const double bound, const std::uint64_t 
             TDLS_CHECK(oot_split == oot);
         }
 
-        // solve_fused() must reproduce factorize + substitute_inplace,
+        // solve_inplace() must reproduce factorize + substitute_inplace,
         // which itself must reproduce the separate substitution.
         {
             std::copy(A0, A0 + N * N, A_other.begin());
@@ -74,7 +74,7 @@ void entry_points_case(const int count, const double bound, const std::uint64_t 
             T y[N];
             for (int i = 0; i < N; ++i)
                 y[i] = b0[i];
-            const bool ok_fused = Solver::template solve_fused<true, true, false>(
+            const bool ok_fused = Solver::template solve_inplace<true, true, false>(
                 A_other.data(), 1, piv, 1, y, 1, oot);
             TDLS_CHECK(ok_fused);
             TDLS_CHECK_BITWISE(A_split.data(), A_other.data(), static_cast<std::size_t>(N) * N);

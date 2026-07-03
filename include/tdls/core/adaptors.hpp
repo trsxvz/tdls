@@ -390,15 +390,15 @@ TDLS_HOST_DEVICE TDLS_FORCEINLINE bool solve(MatrixType& A, PivotType& piv, cons
 /// \param[in,out] y   vector-like right-hand side on entry, solution on exit
 /// \return false on a singular matrix (y left partially updated).
 template<typename UserConfig = void, typename MatrixType, typename PivotType, typename VectorType>
-TDLS_HOST_DEVICE TDLS_FORCEINLINE bool solve_fused(MatrixType& A, PivotType& piv, VectorType& y) {
+TDLS_HOST_DEVICE TDLS_FORCEINLINE bool solve_inplace(MatrixType& A, PivotType& piv, VectorType& y) {
     using ctx = detail::adaptor_context<UserConfig, MatrixType>;
     using mt  = typename ctx::mtraits;
     using pa  = detail::pivot_access<PivotType>;
     detail::check_vector<VectorType, typename ctx::scalar, ctx::N>();
     using yt = storage_traits<std::remove_cv_t<VectorType>>;
-    static_assert(mt::is_mutable, "tdls adaptors: solve_fused factors A in place");
-    static_assert(yt::is_mutable, "tdls adaptors: solve_fused writes into y");
-    return ctx::solver::template solve_fused<yt::is_internal, pa::is_internal, mt::is_internal>(
+    static_assert(mt::is_mutable, "tdls adaptors: solve_inplace factors A in place");
+    static_assert(yt::is_mutable, "tdls adaptors: solve_inplace writes into y");
+    return ctx::solver::template solve_inplace<yt::is_internal, pa::is_internal, mt::is_internal>(
         mt::pointer(A), mt::stride(A), pa::pointer(piv), pa::stride(piv), yt::pointer(y),
         yt::stride(y));
 }

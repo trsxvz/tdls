@@ -20,10 +20,13 @@ expressed through element strides.
 ```cpp
 #include <tdls/tdls.hpp>
 
-// Factorize once, reuse the factorization for every right-hand side.
+// LU solver on 9 x 9 systems, tile size 3. One call: factorize M in
+// place, then overwrite y with the solution. The residency booleans
+// declare every operand caller-local, so the stride arguments (the
+// 1s) are ignored at compile time; with external operands they carry
+// the element stride of each array.
 using Solver = tdls::TiledLUppSolverStatic<double, 9, tdls::TiledLUppConfig<double, 3>>;
-Solver::factorize<true, true>(M, 1, piv, 1);
-Solver::substitute<true, true, true>(M, 1, piv, 1, r, dz, 1);
+Solver::solve_inplace<true, true, true>(M, 1, piv, 1, y, 1);
 ```
 
 Dense math objects can also be passed directly: the adaptors of

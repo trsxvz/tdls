@@ -4,15 +4,6 @@ The free functions of `tdls/core/adaptors.hpp` accept dense math objects
 directly and infer everything the raw interface needs: the scalar
 type, the dimension, the strides and the residency booleans.
 
-```cpp
-#include <tdls/tdls.hpp>
-
-tfel::math::tmatrix<12, 12, double> A = ...;
-tfel::math::tvector<12, double> b = ..., x;
-tfel::math::tvector<12, int> piv;
-tdls::solve(A, piv, b, x);
-```
-
 The detection is purely structural: TDLS names and includes no
 external library. Two shapes are recognized:
 
@@ -41,3 +32,33 @@ array of pointers), which expose no `data()` at all.
 
 For exotic types the detection can be overridden by specializing
 `tdls::storage_traits`.
+
+Plain `TFEL` objects, then `TFEL` strided-coalesced views, in action:
+
+```cpp
+#include <TFEL/Math/Array/StridedCoalescedView.hxx>
+#include <TFEL/Math/tmatrix.hxx>
+#include <TFEL/Math/tvector.hxx>
+
+#include <tdls/tdls.hpp>
+
+// Plain TFEL objects. No alias and no configuration are needed: the
+// adaptors are free functions that deduce the scalar type, the
+// dimension, the strides and the residencies from their arguments,
+// and use the default TiledLUpp configuration.
+tfel::math::tmatrix<12, 12, double> A = ...;
+tfel::math::tvector<12, double> y = ...; // right-hand side, overwritten
+tfel::math::tvector<12, int> piv;
+tdls::solve_inplace(A, piv, y);
+
+// Strided SoA views: system number s of a batch of `stride`
+// interleaved systems, mapped with tfel::math::map_strided. The
+// strides and the residency booleans of the raw interface never
+// appear in either call: the adaptors read the stride carried by
+// each argument and infer its residency (plain object: internal;
+// strided view: external). The pivot stays the plain local vector
+// declared above: placements mix freely.
+auto As = tfel::math::map_strided<tfel::math::tmatrix<12, 12, double>>(a_base + s, stride);
+auto ys = tfel::math::map_strided<tfel::math::tvector<12, double>>(y_base + s, stride);
+tdls::solve_inplace(As, piv, ys);
+```
