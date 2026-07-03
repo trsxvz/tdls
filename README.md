@@ -22,8 +22,8 @@ expressed through element strides.
 
 #include <tdls/tdls.hpp>
 
-// Solver configuration, shared by both variants, every knob spelled out.
-// tdls::TiledLUppDefaultConfig<T> provides ready-made defaults.
+// Solver configuration, every knob spelled out.
+// tdls::TiledLUppDefaultConfig<T> can instead provide ready-made defaults.
 struct Config {
     // Size of the tiles used for the LU factorization
     static constexpr int tile_size = 3;
