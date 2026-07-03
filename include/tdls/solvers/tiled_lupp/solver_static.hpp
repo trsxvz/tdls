@@ -66,6 +66,15 @@
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
 
+// clang reports a forced unrolling that the optimizer could not perform
+// through -Wpass-failed. The unrolling requested by TDLS_UNROLL_FORCE is
+// a performance hint: a failed hint does not affect correctness. The
+// suppression is scoped to this header and to that warning only.
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpass-failed"
+#endif
+
 namespace tdls {
 
 
@@ -1769,6 +1778,10 @@ struct TiledLUppSolverStatic {
 
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop
+#endif
+
+#if defined(__clang__)
+#pragma clang diagnostic pop
 #endif
 
 
