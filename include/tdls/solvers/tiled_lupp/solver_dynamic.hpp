@@ -64,12 +64,24 @@ namespace tdls {
    parameter names (A, A_stride, piv, piv_stride, x, b, y, rhs_stride,
    xcol_stride) are in scope. #undef'd at the end of this header. */
 
-#define TDLS_LUPP_DYN_A(r, c)  A[((r) * n + (c)) * A_stride]
-#define TDLS_LUPP_DYN_PIV(i)   piv[(i) * piv_stride]
-#define TDLS_LUPP_DYN_X(i)     x[(i) * rhs_stride]
-#define TDLS_LUPP_DYN_B(i)     b[(i) * rhs_stride]
+/// \def TDLS_LUPP_DYN_A
+/// \brief Strided element (r, c) of the factor matrix.
+#define TDLS_LUPP_DYN_A(r, c) A[((r) * n + (c)) * A_stride]
+/// \def TDLS_LUPP_DYN_PIV
+/// \brief Strided pivot entry i.
+#define TDLS_LUPP_DYN_PIV(i) piv[(i) * piv_stride]
+/// \def TDLS_LUPP_DYN_X
+/// \brief Strided entry i of the solution vector.
+#define TDLS_LUPP_DYN_X(i) x[(i) * rhs_stride]
+/// \def TDLS_LUPP_DYN_B
+/// \brief Strided entry i of the right-hand side.
+#define TDLS_LUPP_DYN_B(i) b[(i) * rhs_stride]
+/// \def TDLS_LUPP_DYN_XW
+/// \brief Strided entry i of column w of a multi right-hand-side block.
 #define TDLS_LUPP_DYN_XW(w, i) x[(i) * rhs_stride + (w) * xcol_stride]
-#define TDLS_LUPP_DYN_Y(i)     y[(i) * rhs_stride]
+/// \def TDLS_LUPP_DYN_Y
+/// \brief Strided entry i of the fused right-hand side of solve_fused.
+#define TDLS_LUPP_DYN_Y(i) y[(i) * rhs_stride]
 
 
 
@@ -98,8 +110,9 @@ namespace tdls {
 template<typename T, typename TiledLUppSolverConfig = TiledLUppDefaultConfig<T>>
 struct TiledLUppSolverDynamic {
 
-    static constexpr int TS                  = TiledLUppSolverConfig::tile_size;
-    static constexpr TiledLUppSchedule Sched = TiledLUppSolverConfig::schedule;
+    static constexpr int TS = TiledLUppSolverConfig::tile_size; ///< tile extent
+    static constexpr TiledLUppSchedule Sched =
+        TiledLUppSolverConfig::schedule; ///< elimination schedule
 
     static_assert(TiledLUppSolverConfig::singular_eps <= TiledLUppSolverConfig::oot_threshold,
                   "TiledLUppSolverDynamic: singular_eps must not exceed oot_threshold (the "

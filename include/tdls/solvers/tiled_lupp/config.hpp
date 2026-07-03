@@ -99,8 +99,8 @@ struct TiledLUppDefaultConfig {
 /// \tparam Sched elimination schedule
 template<typename T, int TS, TiledLUppSchedule Sched = TiledLUppSchedule::RightLooking>
 struct TiledLUppConfig : TiledLUppDefaultConfig<T> {
-    static constexpr int tile_size              = TS;
-    static constexpr TiledLUppSchedule schedule = Sched;
+    static constexpr int tile_size              = TS;    ///< tile extent
+    static constexpr TiledLUppSchedule schedule = Sched; ///< elimination schedule
 };
 
 

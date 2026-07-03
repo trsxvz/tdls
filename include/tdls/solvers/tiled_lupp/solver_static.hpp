@@ -75,15 +75,30 @@ namespace tdls {
    xcol_stride) and the residency template booleans are in scope.
    #undef'd at the end of this header. */
 
+/// \def TDLS_LUPP_A
+/// \brief Element (r, c) of the factor matrix: contiguous under internal
+/// residency, strided otherwise.
 #define TDLS_LUPP_A(r, c) A[internal_matrix ? ((r) * N + (c)) : ((r) * N + (c)) * A_stride]
-#define TDLS_LUPP_PIV(i)  piv[internal_piv ? (i) : (i) * piv_stride]
-#define TDLS_LUPP_X(i)    x[internal_rhs ? (i) : (i) * rhs_stride]
-#define TDLS_LUPP_B(i)    b[internal_rhs ? (i) : (i) * rhs_stride]
-// W-column variant: column w of a multi-RHS block (W contiguous columns in
-// internal storage, xcol_stride-strided columns in remote memory). W=1
-// collapses to TDLS_LUPP_X exactly.
+/// \def TDLS_LUPP_PIV
+/// \brief Pivot entry i: contiguous under internal residency, strided
+/// otherwise.
+#define TDLS_LUPP_PIV(i) piv[internal_piv ? (i) : (i) * piv_stride]
+/// \def TDLS_LUPP_X
+/// \brief Entry i of the solution vector: contiguous under internal
+/// residency, strided otherwise.
+#define TDLS_LUPP_X(i) x[internal_rhs ? (i) : (i) * rhs_stride]
+/// \def TDLS_LUPP_B
+/// \brief Entry i of the right-hand side: contiguous under internal
+/// residency, strided otherwise.
+#define TDLS_LUPP_B(i) b[internal_rhs ? (i) : (i) * rhs_stride]
+/// \def TDLS_LUPP_XW
+/// \brief Entry i of column w of a multi right-hand-side block: W
+/// contiguous columns under internal residency, xcol_stride-strided
+/// columns in remote memory. W = 1 collapses to TDLS_LUPP_X exactly.
 #define TDLS_LUPP_XW(w, i) x[internal_rhs ? (w) * N + (i) : (i) * rhs_stride + (w) * xcol_stride]
-// Fused-RHS array of solve_fused (y follows the matrix rows through pivoting)
+/// \def TDLS_LUPP_Y
+/// \brief Entry i of the fused right-hand side of solve_fused (y follows
+/// the matrix rows through pivoting).
 #define TDLS_LUPP_Y(i) y[internal_rhs ? (i) : (i) * rhs_stride]
 
 
@@ -120,8 +135,9 @@ namespace tdls {
 template<typename T, int N, typename TiledLUppSolverConfig = TiledLUppDefaultConfig<T>>
 struct TiledLUppSolverStatic {
 
-    static constexpr int TS                  = TiledLUppSolverConfig::tile_size;
-    static constexpr TiledLUppSchedule Sched = TiledLUppSolverConfig::schedule;
+    static constexpr int TS = TiledLUppSolverConfig::tile_size; ///< tile extent
+    static constexpr TiledLUppSchedule Sched =
+        TiledLUppSolverConfig::schedule; ///< elimination schedule
 
     static_assert(N >= 2, "TiledLUppSolverStatic: N must be >= 2");
     static_assert(TiledLUppSolverConfig::singular_eps <= TiledLUppSolverConfig::oot_threshold,
@@ -129,9 +145,10 @@ struct TiledLUppSolverStatic {
                   "floor applies to the out-of-tile recovery path)");
     static_assert(TS >= 2 && TS <= N, "TiledLUppSolverStatic: tile size must satisfy 2 <= TS <= N");
 
-    static constexpr int F    = N / TS;     // full tiles per dimension
-    static constexpr int TAIL = N - F * TS; // trailing tile extent (0 = divisible)
+    static constexpr int F    = N / TS;     ///< full tiles per dimension
+    static constexpr int TAIL = N - F * TS; ///< trailing tile extent (0 = divisible)
 
+    /// \brief Tile micro-kernels instantiated for this configuration.
     using Ops = TiledLUppTileOps<T, TS, TiledLUppSolverConfig::unroll_inner>;
 
     /* =====================================================================

@@ -1,0 +1,50 @@
+# Builds the documentation site (Sphinx pages + Doxygen API reference)
+# and deploys it to GitHub Pages on every push to main.
+name: docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install doxygen
+        run: sudo apt-get update && sudo apt-get install -y doxygen
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install sphinx
+        run: pip install -r docs/requirements.txt
+      - name: Build the API reference
+        run: mkdir -p _build && doxygen Doxyfile
+        working-directory: docs
+      - name: Build the site
+        run: sphinx-build -W -b html docs/sphinx _site
+      - name: Attach the API reference
+        run: cp -r docs/_build/doxygen/html _site/api
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

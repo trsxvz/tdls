@@ -75,20 +75,28 @@ struct has_pair_data<T, std::void_t<decltype(std::declval<const T&>().data().fir
 /// \brief Element pointer type of a dense object, const flavour.
 template<typename T, bool = has_pair_data<T>::value>
 struct const_data_pointer {
+    //! \brief pointer type returned by data()
     using type = decltype(std::declval<const T&>().data());
 };
+/// \brief Element pointer type of a dense object whose data() returns a
+/// (pointer, stride) pair, const flavour.
 template<typename T>
 struct const_data_pointer<T, true> {
+    //! \brief pointer type of the first pair member of data()
     using type = decltype(std::declval<const T&>().data().first);
 };
 
 /// \brief Element pointer type of a dense object, mutable flavour.
 template<typename T, bool = has_pair_data<T>::value>
 struct mutable_data_pointer {
+    //! \brief pointer type returned by data()
     using type = decltype(std::declval<T&>().data());
 };
+/// \brief Element pointer type of a dense object whose data() returns a
+/// (pointer, stride) pair, mutable flavour.
 template<typename T>
 struct mutable_data_pointer<T, true> {
+    //! \brief pointer type of the first pair member of data()
     using type = decltype(std::declval<T&>().data().first);
 };
 
@@ -131,6 +139,10 @@ inline constexpr bool is_dense_v =
 template<typename DenseType, typename = void>
 struct storage_traits;
 
+/// \brief Storage description of dense objects matching the structural
+/// contract: a data() member (plain pointer or (pointer, stride) pair)
+/// and an indexing_policy type with constexpr extents.
+/// \tparam DenseType dense object type (without cv-qualifiers/references)
 template<typename DenseType>
 struct storage_traits<DenseType, std::enable_if_t<detail::is_dense_v<DenseType>>> {
     //! \brief indexing policy of the object

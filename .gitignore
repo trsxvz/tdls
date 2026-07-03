@@ -58,6 +58,7 @@
 build/
 Build/
 build-*/
+docs/_build/
 
 # CMake generated files
 CMakeFiles/
@@ -73,6 +74,8 @@ compile_commands.json
 *.bak
 *.swp
 *.txt
+!CMakeLists.txt
+!requirements.txt
 
 # Visual Studio Code
 .vscode/

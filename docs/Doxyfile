@@ -1,0 +1,13 @@
+# Doxygen configuration of the tdls API reference. Only the settings
+# that differ from the defaults are listed; the reference is built from
+# docs/ with `doxygen Doxyfile` and lands in docs/_build/doxygen.
+PROJECT_NAME           = tdls
+PROJECT_NUMBER         = 0.1.0
+PROJECT_BRIEF          = "Tiny Device-callable Linear Solvers"
+INPUT                  = ../include
+RECURSIVE              = YES
+STRIP_FROM_PATH        = ..
+OUTPUT_DIRECTORY       = _build/doxygen
+GENERATE_LATEX         = NO
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = YES
